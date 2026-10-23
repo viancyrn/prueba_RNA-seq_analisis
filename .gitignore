@@ -1,0 +1,22 @@
+# Datos originales de secuenciación
+*.sra
+*.fastq
+*.fastq.gz
+*.fq
+*.fq.gz
+
+# Archivos de alineamiento
+*.bam
+*.bai
+*.sam
+
+# Genoma de referencia e índices
+ref/
+
+# Archivos temporales
+.DS_Store
+*.tmp
+.download_*/
+
+# Resultados de control de calidad
+01_clean/

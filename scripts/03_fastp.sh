@@ -18,13 +18,13 @@ while IFS= read -r SRR || [[ -n "$SRR" ]]; do
 
     # Definir archivos de entrada y salida
     INPUT="00_raw/${SRR}.fastq"
-    OUTPUT="01_clean/${SRR}_clean.fastq.gz"
-    HTML="01_clean/${SRR}_fastp.html"
-    JSON="01_clean/${SRR}_fastp.json"
-
-    # Comprobar que existe el archivo FASTQ
+    OUTPUT="01_clean/${SRR}_tail1.fastq.gz"
+    HTML="01_clean/${SRR}_tail1_fastp.html"
+    JSON="01_clean/${SRR}_tail1_fastp.json"
+  
+ # Comprobar que existe el archivo FASTQ
     if [[ ! -s "$INPUT" ]]; then
-        echo "ERROR: No existe $INPUT"
+       echo "ERROR: No existe $INPUT"
         exit 1
     fi
 
@@ -42,7 +42,8 @@ while IFS= read -r SRR || [[ -n "$SRR" ]]; do
         -o "$OUTPUT" \
         -h "$HTML" \
         -j "$JSON" \
-        -w 2
+        -w 2 \
+        --trim_tail1 1
 
     # Verificar que se generaron los resultados
     if [[ ! -s "$OUTPUT" || ! -s "$HTML" || ! -s "$JSON" ]]; then

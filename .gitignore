@@ -20,3 +20,6 @@ ref/
 
 # Resultados de control de calidad
 01_clean/
+02_bam/
+03_counts/
+04_multiqc/

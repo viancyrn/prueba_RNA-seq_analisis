@@ -19,8 +19,8 @@ while IFS= read -r SAMPLE || [[ -n "$SAMPLE" ]]; do
     # Ignorar líneas vacías.
     [[ -z "$SAMPLE" ]] && continue
 
-    INPUT="${INPUT_DIR}/${SAMPLE}_clean.fastq.gz"
-    OUTPUT="${OUTPUT_DIR}/${SAMPLE}.bam"
+    INPUT="${INPUT_DIR}/${SAMPLE}_tail1.fastq.gz"
+    OUTPUT="${OUTPUT_DIR}/${SAMPLE}_tail1.bam"
 
     # Evitar repetir alineamientos ya realizados.
     if [[ -s "$OUTPUT" ]]; then

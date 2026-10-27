@@ -1,0 +1,4 @@
+sample_names_replace:
+  "_tail1_flagstat$": ""
+  "_tail1$": ""
+sample_names_replace_regex: true

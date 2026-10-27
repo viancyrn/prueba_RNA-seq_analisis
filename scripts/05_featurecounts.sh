@@ -6,7 +6,7 @@ set -euo pipefail
 # Ejecutar desde el directorio principal del proyecto.
 
 ANNOTATION="ref/Homo_sapiens.GRCh38.115.gtf.gz"
-OUTPUT="03_counts/gene_counts.txt"
+OUTPUT="03_counts/gene_counts_tail1.txt"
 
 # Crear el directorio de resultados.
 mkdir -p 03_counts
@@ -26,9 +26,7 @@ featureCounts \
     -t exon \
     -g gene_id \
     -s 0 \
-    02_bam/SRR19020908.bam \
-    02_bam/SRR19020909.bam \
-    02_bam/SRR19020910.bam
+    02_bam/SRR*_tail1.bam
 
 echo "Conteo de genes finalizado."
 

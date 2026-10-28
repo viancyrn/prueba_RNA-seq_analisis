@@ -99,37 +99,76 @@ These are the main tools I used:
 | featureCounts | Counting reads assigned to genes |
 | MultiQC | Combining results into QC reports |
 
-### Workflow
+### RNA-seq analysis workflow
 
-```text
-SRA download
-     |
-     v
-FASTQ conversion
-     |
-     v
-FastQC on raw reads
-     |
-     v
-fastp trimming
-     |
-     v
-FastQC after trimming
-     |
-     v
-Alignment to GRCh38
-     |
-     v
-BAM validation + flagstat
-     |
-     v
-featureCounts
-     |
-     v
-Final MultiQC report
-     |
-     v
-Next: analysis in R
+The pipeline includes two quantification approaches. The alignment-based workflow has been completed, while the alignment-free workflow using Salmon is the next step.
+
+```mermaid
+flowchart TB
+    A["SRA download and FASTQ conversion<br/>SRA Toolkit"]
+    B["Raw read quality control<br/>FastQC"]
+    C["Read trimming and filtering<br/>fastp"]
+    D["Optimized FASTQ files"]
+    E["Post-trimming quality control<br/>FastQC"]
+
+    A --> B
+    B --> C
+    C --> D
+    D --> E
+
+    subgraph AB["Alignment-based - Completed"]
+        direction TB
+        R1["Reference genome GRCh38<br/>Subread index"]
+        F["Genome alignment<br/>Subread"]
+        G["Aligned reads<br/>BAM files"]
+        H["Alignment quality control<br/>SAMtools"]
+        I["Gene counting<br/>featureCounts"]
+        J["Gene count table"]
+        MQ1["Alignment-based QC report<br/>MultiQC"]
+
+        R1 --> F
+        F --> G
+        G --> H
+        G --> I
+        I --> J
+        H --> MQ1
+        I --> MQ1
+    end
+
+    subgraph AF["Alignment-free - Planned"]
+        direction TB
+        R2["Transcriptome reference<br/>Salmon index"]
+        K["Transcript quantification<br/>Salmon"]
+        L["Transcript abundance estimates<br/>quant.sf"]
+        MQ2["Alignment-free QC report<br/>MultiQC"]
+        M["Gene-level summarization<br/>tximport in R"]
+        N["Gene-level estimates"]
+
+        R2 --> K
+        K --> L
+        K --> MQ2
+        L --> M
+        M --> N
+    end
+
+    D --> F
+    D --> K
+
+    E --> MQ1
+    E --> MQ2
+    C --> MQ1
+    C --> MQ2
+
+    J --> Z["Comparison and downstream analysis<br/>R"]
+    N --> Z
+
+    classDef completed fill:#dff3e5,stroke:#38865a,color:#173b29
+    classDef planned fill:#e2ecff,stroke:#5b83bd,color:#1c355b
+    classDef report fill:#fff0cb,stroke:#c39b3e,color:#60450b
+
+    class A,B,C,D,E,R1,F,G,H,I,J completed
+    class R2,K,L,M,N planned
+    class MQ1,MQ2 report
 ```
 
 The scripts are available in the [`scripts/`](scripts/) folder.

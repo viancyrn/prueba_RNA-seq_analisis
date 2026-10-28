@@ -5,18 +5,21 @@
 **Samples:** SRR19020908, SRR19020909, SRR19020910  
 **Sequencing:** Single-end RNA-seq, 51 bp  
 **Reference genome:** GRCh38  
+**Annotation:** Ensembl release 115
 
 **Languages:** [English](#english) | [Español](#español)
 
 ---
 
-# English 🇬🇧 
+# English 🇬🇧
 
 ## 1. Project overview
 
 This repository is part of my training to create a reproducible bulk RNA-seq analysis workflow using publicly available sequencing data from GEO accession **GSE201955**, which includes RNA-seq data from human bronchial epithelial cells.
+
 As of now, I have only selected 3 samples to test the workflow and understand what happens at each step.
-The workflow covers the initial stages of RNA-seq analysis, from raw sequencing reads to gene-level count, not with the sole goal to run the tools, but also check the results, understand possible problems, and document the decisions I make along the way.
+
+The workflow covers the initial stages of RNA-seq analysis, from raw sequencing reads to gene-level counts and transcript-level abundance estimates, not with the sole goal to run the tools, but also to check the results, understand possible problems, and document the decisions I make along the way.
 
 So far, I have completed:
 
@@ -27,10 +30,12 @@ So far, I have completed:
 5. Comparing the original and optimized trimming results.
 6. Aligning the reads to the human reference genome.
 7. Checking the BAM files and alignment statistics.
-8. Counting reads assigned to genes.
-9. Combining the final quality-control results in MultiQC.
+8. Counting reads assigned to genes with featureCounts.
+9. Quantifying transcript abundance with Salmon.
+10. Generating separate MultiQC reports for the alignment-based and Salmon workflows.
+11. Organizing the scripts, documentation, and final results into a clearer project structure.
 
-The next step will be to prepare the count matrix and continue the analysis in R.
+The next step will be to prepare the count matrix and import the Salmon results into R using tximport.
 
 **Differential gene expression analysis has not yet been performed.**
 
@@ -50,6 +55,8 @@ For the alignment, I used the human reference genome **GRCh38**.
 
 For gene counting, I used the Ensembl GRCh38 release 115 annotation.
 
+For Salmon, I used the Ensembl GRCh38 release 115 cDNA transcriptome.
+
 This is a small test dataset. Before moving to biological comparisons, I still need to check the sample metadata and experimental design.
 
 ## 3. Repository structure
@@ -61,27 +68,63 @@ prueba_RNA-seq_analisis/
 ├── README.md
 ├── .gitignore
 ├── samples.txt
-├── scripts/
-│   ├── 01_download.sh
-│   ├── 02_fastq.sh
-│   ├── 03_fastp.sh
-│   ├── 04_align.sh
-│   └── 05_featurecounts.sh
-├── docs/
-│   └── fastqc_trimming_analysis.md
-├── 00_raw/
-├── 01_clean/
-├── 02_bam/
-├── 03_counts/
-├── 04_multiqc/
-│   ├── multiqc_config.yaml
-│   └── multiqc_final_tail1.html
-└── ref/
+│
+├── code/
+│   ├── bash/
+│   │   ├── 01_download.sh
+│   │   ├── 02_fastq.sh
+│   │   ├── 03_fastp.sh
+│   │   ├── 04_align.sh
+│   │   ├── 05_featurecounts.sh
+│   │   ├── 06_salmon.sh
+│   │   ├── 07_multiqc_alignment.sh
+│   │   └── 08_multiqc_salmon.sh
+│   ├── config/
+│   │   └── multiqc_config.yaml
+│   └── R/
+│
+├── commands/
+│   ├── README.md
+│   └── rnaseq_workflow.md
+│
+├── data/
+│   ├── raw_fastq/
+│   ├── trimmed_fastq/
+│   ├── aligned_bam/
+│   └── references/
+│       ├── genome/
+│       ├── annotation/
+│       ├── transcriptome/
+│       └── indexes/
+│
+└── results/
+    ├── quality_control/
+    │   ├── fastqc_before/
+    │   ├── fastqc_after/
+    │   └── fastp/
+    │
+    ├── alignment_based/
+    │   ├── mapping_statistics/
+    │   ├── featurecounts/
+    │   └── multiqc/
+    │
+    └── pseudoalignment/
+        ├── salmon_quant/
+        ├── tximport/
+        └── multiqc/
 ```
 
 Some folders contain large files that are only stored locally.
 
-I do not upload raw FASTQ files, BAM files, reference files, or count tables to GitHub. Instead, I keep the scripts, documentation, and selected reports needed to understand the analysis.
+I do not upload raw FASTQ files, BAM files, reference files, Salmon quantification files, or large count tables to GitHub. Instead, I keep the scripts, documentation, and selected reports needed to understand the analysis.
+
+The final featureCounts matrix, `gene_counts_tail1.txt`, is stored locally because it is approximately 82 MB. Its summary file is included in the repository.
+
+The `data/` directories and some result directories may not appear on GitHub because their contents are ignored by Git.
+
+The complete explanation of the workflow, including the commands, parameters, results, and decisions, is available here:
+
+[RNA-seq workflow documentation](commands/rnaseq_workflow.md)
 
 ## 4. Tools and workflow
 
@@ -97,81 +140,74 @@ These are the main tools I used:
 | Subread | Aligning reads to GRCh38 |
 | SAMtools | Checking BAM files and alignment statistics |
 | featureCounts | Counting reads assigned to genes |
+| Salmon | Estimating transcript abundance |
 | MultiQC | Combining results into QC reports |
+
+I now have two quantification approaches. Both have been completed up to their respective quantification and quality-control steps.
 
 ### RNA-seq analysis workflow
 
-The pipeline includes two quantification approaches. The alignment-based workflow has been completed, while the alignment-free workflow using Salmon is the next step.
-
 ```mermaid
 flowchart TB
-    A["SRA download and FASTQ conversion<br/>SRA Toolkit"]
+    A["SRA download and FASTQ conversion"]
     B["Raw read quality control<br/>FastQC"]
     C["Read trimming and filtering<br/>fastp"]
-    D["Optimized FASTQ files"]
+    D["Optimized FASTQ files<br/>50 bp"]
     E["Post-trimming quality control<br/>FastQC"]
 
-    A --> B
-    B --> C
-    C --> D
+    A --> B --> C --> D
     D --> E
 
-    subgraph AB["Alignment-based - Completed"]
+    subgraph AB["1. Alignment-based workflow — Completed"]
         direction TB
-        R1["Reference genome GRCh38<br/>Subread index"]
-        F["Genome alignment<br/>Subread"]
-        G["Aligned reads<br/>BAM files"]
-        H["Alignment quality control<br/>SAMtools"]
-        I["Gene counting<br/>featureCounts"]
-        J["Gene count table"]
-        MQ1["Alignment-based QC report<br/>MultiQC"]
+        F["Genome alignment<br/>Subread / GRCh38"]
+        G["BAM validation and mapping statistics<br/>SAMtools"]
+        H["Gene counting<br/>featureCounts"]
+        I["Gene count matrix"]
+        J["Alignment-based QC<br/>MultiQC"]
 
-        R1 --> F
-        F --> G
-        G --> H
-        G --> I
-        I --> J
-        H --> MQ1
-        I --> MQ1
+        F --> G --> H --> I
+        G --> J
+        H --> J
     end
 
-    subgraph AF["Alignment-free - Planned"]
+    subgraph AF["2. Transcript-based workflow — Completed"]
         direction TB
-        R2["Transcriptome reference<br/>Salmon index"]
-        K["Transcript quantification<br/>Salmon"]
+        K["Transcript quantification<br/>Salmon / Ensembl cDNA"]
         L["Transcript abundance estimates<br/>quant.sf"]
-        MQ2["Alignment-free QC report<br/>MultiQC"]
-        M["Gene-level summarization<br/>tximport in R"]
-        N["Gene-level estimates"]
+        M["Salmon QC<br/>MultiQC"]
 
-        R2 --> K
         K --> L
-        K --> MQ2
-        L --> M
-        M --> N
+        K --> M
     end
 
     D --> F
     D --> K
+    E --> J
+    E --> M
 
-    E --> MQ1
-    E --> MQ2
-    C --> MQ1
-    C --> MQ2
+    I --> N["Next step: analysis in R"]
+    L --> O["Next step: tximport"]
+    O --> N
 
-    J --> Z["Comparison and downstream analysis<br/>R"]
-    N --> Z
+    classDef completed fill:#e4f3e8,stroke:#44845a,color:#173b29
+    classDef planned fill:#e8efff,stroke:#6485b7,color:#213b62
+    classDef report fill:#fff2d8,stroke:#c59a48,color:#654b19
 
-    classDef completed fill:#dff3e5,stroke:#38865a,color:#173b29
-    classDef planned fill:#e2ecff,stroke:#5b83bd,color:#1c355b
-    classDef report fill:#fff0cb,stroke:#c39b3e,color:#60450b
-
-    class A,B,C,D,E,R1,F,G,H,I,J completed
-    class R2,K,L,M,N planned
-    class MQ1,MQ2 report
+    class A,B,C,D,E,F,G,H,I,K,L completed
+    class N,O planned
+    class J,M report
 ```
 
-The scripts are available in the [`scripts/`](scripts/) folder.
+The diagram shows the two approaches separately because they produce different types of quantification results.
+
+The alignment-based workflow produces gene counts using Subread and featureCounts.
+
+The Salmon workflow produces transcript-level abundance estimates without generating genome-aligned BAM files.
+
+Both approaches use the same optimized FASTQ files.
+
+The scripts are available in the [`code/bash/`](code/bash/) folder.
 
 They should be run from the main project directory.
 
@@ -193,13 +229,13 @@ I did not remove the first 13 bases because the nucleotide composition pattern c
 
 ### 5.2 Original and optimized trimming
 
-I first processed the reads using fastp using it's standard settings and saved the output as:
+I first processed the reads using fastp with its standard settings and saved the output as:
 
 ```text
 _clean.fastq.gz
 ```
 
-After reviewing the FastQC results, I tested a second approach using additional fastp settings:
+After reviewing the FastQC results, I tested a second approach using an additional fastp setting:
 
 ```bash
 --trim_tail1 1
@@ -213,7 +249,9 @@ The optimized output files are named:
 _tail1.fastq.gz
 ```
 
-I kept both versions so I could compare the results instead of replacing the original files.
+I initially kept both versions so I could compare the results instead of replacing the original files.
+
+After completing the comparison and documenting the results, I removed the intermediate files from the original trimming strategy. I kept the optimized FASTQ files for the final analyses.
 
 ### 5.3 How many reads were retained?
 
@@ -256,9 +294,18 @@ The **Per base sequence content** module still failed.
 
 I decided not to apply additional trimming just to make every FastQC module pass. I think it is more important to understand why a warning appears than to remove data without knowing whether that is necessary.
 
-The full analysis between the different fastp results are documented here:
+The full analysis and comparison between the different fastp results are documented here:
 
-[FastQC and trimming analysis](docs/fastqc_trimming_analysis.md)
+[FastQC and trimming analysis](commands/rnaseq_workflow.md)
+
+The final FastQC reports are available in:
+
+- [`results/quality_control/fastqc_before/`](results/quality_control/fastqc_before/)
+- [`results/quality_control/fastqc_after/`](results/quality_control/fastqc_after/)
+
+The final fastp reports are available in:
+
+[`results/quality_control/fastp/`](results/quality_control/fastp/)
 
 ## 6. Alignment to the reference genome
 
@@ -266,9 +313,11 @@ After selecting the optimized reads, I aligned them to the human reference genom
 
 The script is:
 
-[`scripts/04_align.sh`](scripts/04_align.sh)
+[`code/bash/04_align.sh`](code/bash/04_align.sh)
 
-The new BAM files were saved with the `_tail1.bam` suffix so the original BAM files would not be overwritten so I could still use them for later comparisons.
+The new BAM files were saved with the `_tail1.bam` suffix so the original BAM files would not be overwritten and I could still use them for later comparisons.
+
+After completing the comparisons, I removed the older BAM files and kept the optimized versions locally.
 
 ### Alignment results
 
@@ -283,12 +332,16 @@ The mapping rates were similar across all three samples.
 I also checked the BAM files using:
 
 ```bash
-samtools quickcheck -v 02_bam/*_tail1.bam
+samtools quickcheck -v data/aligned_bam/*_tail1.bam
 ```
 
 All three files passed the check.
 
 After that, I generated SAMtools `flagstat` reports to include the mapping statistics in MultiQC.
+
+The final mapping statistics are available here:
+
+[`results/alignment_based/mapping_statistics/`](results/alignment_based/mapping_statistics/)
 
 ## 7. Gene counting with featureCounts
 
@@ -296,12 +349,12 @@ Once the BAM files were ready, I used featureCounts to count reads assigned to g
 
 The script is:
 
-[`scripts/05_featurecounts.sh`](scripts/05_featurecounts.sh)
+[`code/bash/05_featurecounts.sh`](code/bash/05_featurecounts.sh)
 
 I used the following annotation:
 
 ```text
-ref/Homo_sapiens.GRCh38.115.gtf.gz
+data/references/annotation/Homo_sapiens.GRCh38.115.gtf.gz
 ```
 
 The main parameters were:
@@ -314,6 +367,7 @@ The main parameters were:
 ```
 
 I compared the different strandedness settings in featureCounts to see which one assigned the most reads to genes.
+
 The unstranded setting (`-s 0`) gave the highest number of assigned reads, so I decided to use it for the final gene counts. This result supports the choice of unstranded counting, although the number of assigned reads alone does not definitively confirm the library preparation method.
 
 For other RNA-seq datasets, strandedness information may already be available in the study documentation. It is useful to check the GEO or SRA metadata, the original publication, and especially the library preparation methods or sequencing protocol.
@@ -325,24 +379,28 @@ It is important to check this before gene counting because using the wrong stran
 The optimized results were saved in:
 
 ```text
-03_counts/gene_counts_tail1.txt
+results/alignment_based/featurecounts/gene_counts_tail1.txt
 ```
 
-### Gene assignment results
+The count matrix is stored locally. Its summary file is available on GitHub:
 
-### Why I repeated the analysis
+[`gene_counts_tail1.txt.summary`](results/alignment_based/featurecounts/gene_counts_tail1.txt.summary)
+
+### 7.1 Why I repeated the analysis
 
 I initially processed the reads using fastp and continued with alignment and gene counting. At that point, I had not yet performed a separate FastQC analysis.
+
 After going over my workflow with my professor, he pointed out that I had skipped FastQC. He explained that although fastp provides quality statistics and reports, I should also examine the sequencing data independently before deciding whether additional trimming is necessary.
 
 I therefore went back to the raw FASTQ files and ran FastQC. This helped me identify the lower quality and increased N content at the final base, as well as the nucleotide composition bias at the beginning of the reads.
+
 Based on these results, I decided to test an optimized fastp strategy using `--trim_tail1 1`. I then repeated FastQC, alignment, and gene counting so I could compare both workflows.
 
 Using FastQC together with fastp was useful because the tools provide complementary information. FastQC gives clear figures showing quality patterns across read positions, nucleotide composition, GC content, and other potential problems. These figures made it easier for me to identify what needed attention and to evaluate the results of fastp more carefully.
 
 The comparison also helped me understand that a trimming decision should be based on the quality of the data, not only on whether a tool finishes successfully.
 
-### Gene assignment results
+### 7.2 Gene assignment results
 
 | Sample | Assigned reads | Assignment rate |
 |---|---:|---:|
@@ -362,23 +420,114 @@ The differences were very small.
 
 This suggests that trimming the final base improved the read quality without substantially changing the gene counting results.
 
-## 8. MultiQC reports
+## 8. Transcript quantification with Salmon
+
+After completing the alignment-based workflow, I also wanted to test a different approach for quantifying RNA-seq data.
+
+Instead of aligning the reads to the entire reference genome and counting reads assigned to genes, Salmon estimates transcript abundance using a transcriptome reference.
+
+I used the same optimized FASTQ files as in the alignment-based workflow, so both approaches started from the same processed sequencing data.
+
+The script is:
+
+[`code/bash/06_salmon.sh`](code/bash/06_salmon.sh)
+
+### 8.1 Transcriptome reference and index
+
+For Salmon, I used the Ensembl GRCh38 release 115 cDNA transcriptome.
+
+I created a Salmon index using a k-mer length of 21:
+
+```bash
+-k 21
+```
+
+I selected this value because the reads were relatively short, approximately 50 bp after trimming.
+
+However, I have not independently tested whether this k-mer length is optimal for this dataset.
+
+The index was created from the Ensembl cDNA sequences without adding genomic decoy sequences.
+
+This is important because a transcriptome-only index may not distinguish some reads originating from similar genomic sequences as effectively as a decoy-aware index.
+
+### 8.2 Salmon quantification settings
+
+I used Salmon version 2.8.0 with the following main settings:
+
+```bash
+--sketch
+-l U
+--fldMean 250
+--fldSD 25
+```
+
+The `--sketch` option uses Salmon's pseudoalignment mode.
+
+I used `-l U` to specify an unstranded single-end library, consistent with the provisional choice made during featureCounts analysis.
+
+However, I still need to verify the actual library strandedness using the study metadata or an independent method.
+
+For the fragment length distribution, I used an assumed mean of 250 bp and a standard deviation of 25 bp.
+
+These values were not measured from the sequencing data.
+
+For single-end RNA-seq, Salmon cannot directly estimate the full fragment length distribution from paired reads, so these assumptions can influence effective transcript lengths and abundance estimates.
+
+I want to review the library preparation information before using these results for biological interpretation.
+
+### 8.3 Salmon results
+
+Salmon completed transcript quantification for all three samples.
+
+| Sample | Salmon mapping rate |
+|---|---:|
+| SRR19020908 | 83.47% |
+| SRR19020909 | Approximately 87.4% |
+| SRR19020910 | 85.21% |
+
+The mapping rates were reasonably similar across the three samples.
+
+These percentages should not be interpreted as directly equivalent to the Subread genome-alignment percentages because the two approaches use different references and mapping methods.
+
+Salmon generated a `quant.sf` file for each sample.
+
+These files contain transcript-level abundance estimates, including TPM values and estimated read counts.
+
+The quantification files are stored locally in:
+
+```text
+results/pseudoalignment/salmon_quant/
+```
+
+I have not yet imported these files into R or summarized them at gene level.
+
+### 8.4 Limitations and possible improvements
+
+The current Salmon workflow was useful for learning how transcript-level quantification differs from genome alignment and gene counting.
+
+However, there are some aspects I still want to review:
+
+1. Confirm the library strandedness using the study metadata or an independent method.
+2. Check whether the assumed fragment length distribution is appropriate for this library.
+3. Evaluate whether a decoy-aware transcriptome index would improve the analysis.
+4. Consider Salmon selective alignment as an alternative to the `--sketch` mode used here.
+5. Import the `quant.sf` files into R using tximport and a transcript-to-gene mapping consistent with Ensembl release 115.
+
+Salmon's documentation describes selective alignment and sketch mode as different mapping approaches. Selective alignment evaluates candidate mappings using alignment scores, while sketch mode uses a faster pseudoalignment strategy.
+
+I have not rerun the analysis using selective alignment or a decoy-aware index. These are possible future improvements, not completed steps.
+
+## 9. MultiQC reports
 
 I generated separate MultiQC reports because I wanted to keep the different processing stages clear.
 
-The reports include:
+During the development of the workflow, I created intermediate reports to compare the original reads, the default fastp processing, and the optimized trimming strategy.
 
-1. `multiqc_before.html` — FastQC before trimming.
-2. `multiqc_after.html` — FastQC after the original trimming.
-3. `multiqc_tail1.html` — FastQC after optimized trimming.
-4. `multiqc_fastp_comparison.html` — comparison of both fastp strategies.
-5. `multiqc_final_tail1.html` — final report for the optimized pipeline.
+After documenting those comparisons, I removed the older intermediate reports and kept the two final reports.
 
-The intermediate reports are stored locally.
+### 9.1 Final alignment-based MultiQC report
 
-### Final MultiQC report
-
-For the final report, I combined:
+For the final alignment-based report, I combined:
 
 - FastQC results from the optimized reads.
 - fastp results from the optimized processing.
@@ -391,17 +540,42 @@ This was solved by using a configuration file to standardize the sample names.
 
 Now the **General Statistics** table shows three rows, one for each sample, with results from the different tools combined.
 
-**Final report:**
+**Final alignment-based report:**
 
-[Download the final MultiQC report](04_multiqc/multiqc_final_tail1.html)
+[Download the final alignment-based MultiQC report](results/alignment_based/multiqc/multiqc_final_tail1.html)
 
-**Configuration file:**
+### 9.2 Final Salmon MultiQC report
 
-[View the MultiQC configuration](04_multiqc/multiqc_config.yaml)
+I also generated a separate MultiQC report for the Salmon workflow.
 
-**Note:** GitHub may not preview the HTML file because of its size. To view the interactive report, download the raw HTML file and open it in a browser.
+This report includes:
 
-## 9. What I learned from the results
+- Salmon mapping and quantification statistics.
+- Salmon library-format information.
+- Fragment length distribution information.
+- fastp statistics.
+- FastQC results from the optimized reads.
+
+I used the same sample-name configuration so the results could be organized consistently across the three samples.
+
+**Final Salmon report:**
+
+[Download the final Salmon MultiQC report](results/pseudoalignment/multiqc/multiqc_salmon_final.html)
+
+### 9.3 MultiQC configuration
+
+Both reports use the same configuration file:
+
+[View the MultiQC configuration](code/config/multiqc_config.yaml)
+
+The scripts used to generate the reports are:
+
+- [`07_multiqc_alignment.sh`](code/bash/07_multiqc_alignment.sh)
+- [`08_multiqc_salmon.sh`](code/bash/08_multiqc_salmon.sh)
+
+**Note:** GitHub may not preview the HTML files because of their size. To view the interactive reports, download the raw HTML files and open them in a browser.
+
+## 10. What I learned from the results
 
 The optimized pipeline worked for all three samples.
 
@@ -410,26 +584,68 @@ The main results were:
 - More than 99% of the reads were retained after filtering.
 - Q30 was approximately 99% for all samples.
 - Removing the final base corrected the quality and `N` content issues.
-- Mapping rates were between 88.83% and 89.32%.
-- Gene assignment rates were between 68.5% and 72.4%.
+- Mapping rates with Subread were between 88.83% and 89.32%.
+- Gene assignment rates with featureCounts were between 68.5% and 72.4%.
 - All optimized BAM files passed validation.
 - The optimized and original gene counts were very similar.
+- Salmon successfully generated transcript abundance estimates for all three samples.
+- The two quantification approaches produced their own results and quality-control reports.
 
-## 10. Next steps
+I also learned that mapping and assignment percentages need to be interpreted in the context of the reference, annotation, and method being used.
 
-The next part of the project will focus on working with the gene counts in R.
+A higher percentage does not automatically mean that one approach is biologically more accurate.
+
+The next step is to understand how the different quantification results can be used in R and whether the sample metadata supports meaningful biological comparisons.
+
+## 11. Next steps
+
+The next part of the project will focus on working with the gene counts and transcript abundance estimates in R.
 
 I plan to:
 
 1. Import the featureCounts output.
 2. Prepare the count matrix.
-3. Review the sample metadata and experimental groups.
-4. Confirm library strandedness.
-5. Explore the data using PCA and sample clustering.
-6. Check whether the experimental design supports differential expression analysis with DESeq2.
-7. Document the results and any decisions made during the analysis.
+3. Import the Salmon `quant.sf` files using tximport.
+4. Prepare a transcript-to-gene mapping using the corresponding Ensembl annotation.
+5. Review the sample metadata and experimental groups.
+6. Confirm library strandedness.
+7. Review the fragment length assumptions used for Salmon.
+8. Explore the data using PCA and sample clustering.
+9. Compare the results from the alignment-based and Salmon workflows where appropriate.
+10. Check whether the experimental design supports differential expression analysis with DESeq2.
+11. Document the results and any decisions made during the analysis.
 
----
+I also want to improve the reproducibility of the workflow by documenting reference preparation and index creation more explicitly.
+
+## 12. References and documentation
+
+The following resources were used to understand the tools and methods included in this project.
+
+### Dataset and reference
+
+- [GEO GSE201955](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE201955)
+- [Ensembl human genome](https://www.ensembl.org/Homo_sapiens/Info/Index)
+- [Ensembl FTP archive — release 115](https://ftp.ensembl.org/pub/release-115/)
+
+### Quality control and alignment
+
+- [SRA Toolkit documentation](https://github.com/ncbi/sra-tools/wiki)
+- [FastQC](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/)
+- [fastp — Chen et al., 2018](https://doi.org/10.1093/bioinformatics/bty560)
+- [Subread — Liao et al., 2013](https://doi.org/10.1093/nar/gkt214)
+- [featureCounts — Liao et al., 2014](https://doi.org/10.1093/bioinformatics/btt656)
+- [SAMtools — Li et al., 2009](https://doi.org/10.1093/bioinformatics/btp352)
+- [MultiQC — Ewels et al., 2016](https://doi.org/10.1093/bioinformatics/btw354)
+
+### Salmon and downstream analysis
+
+- [Salmon documentation](https://salmon.readthedocs.io/)
+- [Salmon mapping modes: selective alignment and sketch mode](https://combine-lab.github.io/salmon/guides/mapping-modes/)
+- [Salmon — Patro et al., 2017](https://doi.org/10.1038/nmeth.4197)
+- [tximport — Bioconductor](https://bioconductor.org/packages/tximport/)
+- [tximport — Soneson, Love and Robinson, 2015](https://doi.org/10.12688/f1000research.7563.1)
+- [DESeq2 — Love, Huber and Anders, 2014](https://doi.org/10.1186/s13059-014-0550-8)
+- [RSeQC — Wang et al., 2012](https://doi.org/10.1093/bioinformatics/bts356)
 
 ---
 
@@ -441,7 +657,7 @@ Este repositorio forma parte de mi proceso de aprendizaje para crear un flujo de
 
 Por ahora, solamente he seleccionado 3 muestras para probar el flujo de trabajo y entender qué ocurre en cada etapa.
 
-El análisis cubre las primeras etapas del procesamiento de RNA-seq, desde las lecturas originales hasta el conteo de lecturas por gen. Mi objetivo no es solamente ejecutar las herramientas, sino también revisar los resultados, entender los posibles problemas y documentar las decisiones que voy tomando durante el proceso.
+El análisis cubre las primeras etapas del procesamiento de RNA-seq, desde las lecturas originales hasta el conteo de lecturas por gen y la estimación de abundancia a nivel de transcritos. Mi objetivo no es solamente ejecutar las herramientas, sino también revisar los resultados, entender los posibles problemas y documentar las decisiones que voy tomando durante el proceso.
 
 Hasta ahora he completado:
 
@@ -452,10 +668,12 @@ Hasta ahora he completado:
 5. La comparación entre los resultados del recorte original y el optimizado.
 6. El alineamiento de las lecturas al genoma de referencia humano.
 7. La revisión de los archivos BAM y las estadísticas de alineamiento.
-8. El conteo de las lecturas asignadas a genes.
-9. La integración de los resultados finales de control de calidad con MultiQC.
+8. El conteo de las lecturas asignadas a genes con featureCounts.
+9. La cuantificación de la abundancia de transcritos con Salmon.
+10. La generación de informes MultiQC separados para los flujos de trabajo basados en alineamiento y Salmon.
+11. La organización de los scripts, la documentación y los resultados finales en una estructura más clara.
 
-El siguiente paso será preparar la matriz de conteos y continuar el análisis en R.
+El siguiente paso será preparar la matriz de conteos e importar los resultados de Salmon en R utilizando tximport.
 
 **Todavía no he realizado el análisis de expresión diferencial.**
 
@@ -475,6 +693,8 @@ Para el alineamiento utilicé el genoma de referencia humano **GRCh38**.
 
 Para el conteo de genes utilicé la anotación Ensembl GRCh38, versión 115.
 
+Para Salmon utilicé el transcriptoma cDNA de Ensembl GRCh38, versión 115.
+
 Este es un conjunto pequeño de muestras para probar el análisis. Antes de realizar comparaciones biológicas, todavía necesito revisar los metadatos de las muestras y el diseño experimental.
 
 ## 3. Estructura del repositorio
@@ -486,27 +706,63 @@ prueba_RNA-seq_analisis/
 ├── README.md
 ├── .gitignore
 ├── samples.txt
-├── scripts/
-│   ├── 01_download.sh
-│   ├── 02_fastq.sh
-│   ├── 03_fastp.sh
-│   ├── 04_align.sh
-│   └── 05_featurecounts.sh
-├── docs/
-│   └── fastqc_trimming_analysis.md
-├── 00_raw/
-├── 01_clean/
-├── 02_bam/
-├── 03_counts/
-├── 04_multiqc/
-│   ├── multiqc_config.yaml
-│   └── multiqc_final_tail1.html
-└── ref/
+│
+├── code/
+│   ├── bash/
+│   │   ├── 01_download.sh
+│   │   ├── 02_fastq.sh
+│   │   ├── 03_fastp.sh
+│   │   ├── 04_align.sh
+│   │   ├── 05_featurecounts.sh
+│   │   ├── 06_salmon.sh
+│   │   ├── 07_multiqc_alignment.sh
+│   │   └── 08_multiqc_salmon.sh
+│   ├── config/
+│   │   └── multiqc_config.yaml
+│   └── R/
+│
+├── commands/
+│   ├── README.md
+│   └── rnaseq_workflow.md
+│
+├── data/
+│   ├── raw_fastq/
+│   ├── trimmed_fastq/
+│   ├── aligned_bam/
+│   └── references/
+│       ├── genome/
+│       ├── annotation/
+│       ├── transcriptome/
+│       └── indexes/
+│
+└── results/
+    ├── quality_control/
+    │   ├── fastqc_before/
+    │   ├── fastqc_after/
+    │   └── fastp/
+    │
+    ├── alignment_based/
+    │   ├── mapping_statistics/
+    │   ├── featurecounts/
+    │   └── multiqc/
+    │
+    └── pseudoalignment/
+        ├── salmon_quant/
+        ├── tximport/
+        └── multiqc/
 ```
 
 Algunas carpetas contienen archivos grandes que solamente guardo de manera local.
 
-No subo los archivos FASTQ originales, los archivos BAM, los archivos de referencia ni las tablas de conteos a GitHub. En su lugar, mantengo los scripts, la documentación y algunos informes seleccionados que permiten entender el análisis.
+No subo los archivos FASTQ originales, los archivos BAM, los archivos de referencia, los archivos de cuantificación de Salmon ni las tablas de conteos grandes a GitHub. En su lugar, mantengo los scripts, la documentación y algunos informes seleccionados que permiten entender el análisis.
+
+La matriz final de featureCounts, `gene_counts_tail1.txt`, se conserva localmente porque ocupa aproximadamente 82 MB. Su archivo de resumen sí está incluido en el repositorio.
+
+Es posible que las carpetas `data/` y algunos directorios de resultados no aparezcan en GitHub porque sus archivos están excluidos mediante Git.
+
+La explicación completa del flujo de trabajo, incluyendo los comandos, parámetros, resultados y decisiones, está disponible aquí:
+
+[Documentación del flujo de trabajo de RNA-seq](commands/rnaseq_workflow.md)
 
 ## 4. Herramientas y flujo de trabajo
 
@@ -522,42 +778,74 @@ Estas son las principales herramientas que utilicé:
 | Subread | Alinear las lecturas a GRCh38 |
 | SAMtools | Revisar los archivos BAM y las estadísticas de alineamiento |
 | featureCounts | Contar las lecturas asignadas a genes |
+| Salmon | Estimar la abundancia de transcritos |
 | MultiQC | Combinar los resultados en informes de control de calidad |
 
-### Flujo de trabajo
+Ahora tengo dos enfoques de cuantificación. Ambos se han completado hasta sus respectivas etapas de cuantificación y control de calidad.
 
-```text
-Descarga desde SRA
-       |
-       v
-Conversión a FASTQ
-       |
-       v
-FastQC de las lecturas originales
-       |
-       v
-Recorte con fastp
-       |
-       v
-FastQC después del recorte
-       |
-       v
-Alineamiento a GRCh38
-       |
-       v
-Validación BAM + flagstat
-       |
-       v
-featureCounts
-       |
-       v
-Informe final de MultiQC
-       |
-       v
-Siguiente etapa: análisis en R
+### Flujo de trabajo de RNA-seq
+
+```mermaid
+flowchart TB
+    A["Descarga desde SRA y conversión a FASTQ"]
+    B["Control de calidad inicial<br/>FastQC"]
+    C["Recorte y filtrado<br/>fastp"]
+    D["Archivos FASTQ optimizados<br/>50 pb"]
+    E["Control de calidad después del recorte<br/>FastQC"]
+
+    A --> B --> C --> D
+    D --> E
+
+    subgraph AB["1. Flujo basado en alineamiento — Completado"]
+        direction TB
+        F["Alineamiento al genoma<br/>Subread / GRCh38"]
+        G["Validación BAM y estadísticas<br/>SAMtools"]
+        H["Conteo de genes<br/>featureCounts"]
+        I["Matriz de conteos por gen"]
+        J["Control de calidad<br/>MultiQC"]
+
+        F --> G --> H --> I
+        G --> J
+        H --> J
+    end
+
+    subgraph AF["2. Flujo basado en transcritos — Completado"]
+        direction TB
+        K["Cuantificación de transcritos<br/>Salmon / Ensembl cDNA"]
+        L["Estimaciones de abundancia<br/>quant.sf"]
+        M["Control de calidad de Salmon<br/>MultiQC"]
+
+        K --> L
+        K --> M
+    end
+
+    D --> F
+    D --> K
+    E --> J
+    E --> M
+
+    I --> N["Siguiente etapa: análisis en R"]
+    L --> O["Siguiente etapa: tximport"]
+    O --> N
+
+    classDef completed fill:#e4f3e8,stroke:#44845a,color:#173b29
+    classDef planned fill:#e8efff,stroke:#6485b7,color:#213b62
+    classDef report fill:#fff2d8,stroke:#c59a48,color:#654b19
+
+    class A,B,C,D,E,F,G,H,I,K,L completed
+    class N,O planned
+    class J,M report
 ```
 
-Los scripts están disponibles en la carpeta [`scripts/`](scripts/).
+El diagrama muestra los dos enfoques por separado porque producen diferentes tipos de resultados de cuantificación.
+
+El flujo basado en alineamiento genera conteos por gen utilizando Subread y featureCounts.
+
+El flujo de Salmon genera estimaciones de abundancia a nivel de transcritos sin producir archivos BAM alineados al genoma.
+
+Ambos enfoques utilizan los mismos archivos FASTQ optimizados.
+
+Los scripts están disponibles en la carpeta [`code/bash/`](code/bash/).
 
 Deben ejecutarse desde el directorio principal del proyecto.
 
@@ -599,7 +887,9 @@ Los archivos optimizados tienen el sufijo:
 _tail1.fastq.gz
 ```
 
-Conservé las dos versiones para poder comparar los resultados sin reemplazar los archivos originales.
+Inicialmente conservé las dos versiones para poder comparar los resultados sin reemplazar los archivos originales.
+
+Después de completar la comparación y documentar los resultados, eliminé los archivos intermedios del procesamiento original. Conservé los archivos FASTQ optimizados para los análisis finales.
 
 ### 5.3 ¿Cuántas lecturas se conservaron?
 
@@ -644,7 +934,16 @@ Decidí no realizar un recorte adicional solamente para conseguir que todos los 
 
 El análisis completo y la comparación entre los diferentes resultados de fastp están documentados aquí:
 
-[FastQC and trimming analysis](docs/fastqc_trimming_analysis.md)
+[Análisis de FastQC y recorte](commands/rnaseq_workflow.md)
+
+Los informes finales de FastQC están disponibles en:
+
+- [`results/quality_control/fastqc_before/`](results/quality_control/fastqc_before/)
+- [`results/quality_control/fastqc_after/`](results/quality_control/fastqc_after/)
+
+Los informes finales de fastp están disponibles en:
+
+[`results/quality_control/fastp/`](results/quality_control/fastp/)
 
 ## 6. Alineamiento al genoma de referencia
 
@@ -652,9 +951,11 @@ Después de seleccionar las lecturas optimizadas, las alineé al genoma de refer
 
 El script es:
 
-[`scripts/04_align.sh`](scripts/04_align.sh)
+[`code/bash/04_align.sh`](code/bash/04_align.sh)
 
 Guardé los nuevos archivos BAM con el sufijo `_tail1.bam` para no sobrescribir los archivos BAM originales y poder conservarlos para comparaciones posteriores.
+
+Después de completar las comparaciones, eliminé los archivos BAM anteriores y conservé localmente las versiones optimizadas.
 
 ### Resultados del alineamiento
 
@@ -669,12 +970,16 @@ Los porcentajes de alineamiento fueron similares entre las tres muestras.
 También revisé los archivos BAM utilizando:
 
 ```bash
-samtools quickcheck -v 02_bam/*_tail1.bam
+samtools quickcheck -v data/aligned_bam/*_tail1.bam
 ```
 
 Los tres archivos pasaron la validación.
 
 Después generé los informes `flagstat` de SAMtools para incluir las estadísticas de alineamiento en MultiQC.
+
+Las estadísticas finales están disponibles aquí:
+
+[`results/alignment_based/mapping_statistics/`](results/alignment_based/mapping_statistics/)
 
 ## 7. Conteo de genes con featureCounts
 
@@ -682,12 +987,12 @@ Una vez que los archivos BAM estuvieron listos, utilicé featureCounts para cont
 
 El script es:
 
-[`scripts/05_featurecounts.sh`](scripts/05_featurecounts.sh)
+[`code/bash/05_featurecounts.sh`](code/bash/05_featurecounts.sh)
 
 Utilicé la siguiente anotación:
 
 ```text
-ref/Homo_sapiens.GRCh38.115.gtf.gz
+data/references/annotation/Homo_sapiens.GRCh38.115.gtf.gz
 ```
 
 Los parámetros principales fueron:
@@ -712,10 +1017,14 @@ Es importante comprobar este aspecto antes del conteo de genes porque utilizar u
 Los resultados optimizados se guardaron en:
 
 ```text
-03_counts/gene_counts_tail1.txt
+results/alignment_based/featurecounts/gene_counts_tail1.txt
 ```
 
-### Por qué repetí el análisis
+La matriz de conteos se conserva localmente. Su archivo de resumen está disponible en GitHub:
+
+[`gene_counts_tail1.txt.summary`](results/alignment_based/featurecounts/gene_counts_tail1.txt.summary)
+
+### 7.1 Por qué repetí el análisis
 
 Inicialmente procesé las lecturas utilizando fastp y continué con el alineamiento y el conteo de genes. En ese momento todavía no había realizado un análisis independiente con FastQC.
 
@@ -729,7 +1038,7 @@ Utilizar FastQC junto con fastp fue útil porque las dos herramientas proporcion
 
 Esta comparación también me permitió entender que las decisiones de recorte deben basarse en la calidad de los datos y no solamente en que una herramienta haya terminado correctamente.
 
-### Resultados de asignación a genes
+### 7.2 Resultados de asignación a genes
 
 | Muestra | Lecturas asignadas | Porcentaje de asignación |
 |---|---:|---:|
@@ -749,23 +1058,114 @@ Las diferencias fueron muy pequeñas.
 
 Esto sugiere que eliminar la última base mejoró la calidad de las lecturas sin cambiar de manera importante los resultados del conteo de genes.
 
-## 8. Informes de MultiQC
+## 8. Cuantificación de transcritos con Salmon
+
+Después de completar el flujo de trabajo basado en alineamiento, también quise probar un enfoque diferente para cuantificar los datos de RNA-seq.
+
+En lugar de alinear las lecturas al genoma completo y contar las lecturas asignadas a genes, Salmon estima la abundancia de transcritos utilizando una referencia del transcriptoma.
+
+Utilicé los mismos archivos FASTQ optimizados que en el flujo basado en alineamiento, de manera que ambos enfoques partieran de los mismos datos procesados.
+
+El script es:
+
+[`code/bash/06_salmon.sh`](code/bash/06_salmon.sh)
+
+### 8.1 Referencia del transcriptoma e índice
+
+Para Salmon utilicé el transcriptoma cDNA de Ensembl GRCh38, versión 115.
+
+Creé un índice de Salmon utilizando una longitud de k-mer de 21:
+
+```bash
+-k 21
+```
+
+Seleccioné este valor porque las lecturas eran relativamente cortas, aproximadamente 50 pb después del recorte.
+
+Sin embargo, todavía no he comprobado de manera independiente si esta longitud de k-mer es la más adecuada para este conjunto de datos.
+
+El índice se creó a partir de las secuencias cDNA de Ensembl, sin añadir secuencias genómicas decoy.
+
+Esto es importante porque un índice basado únicamente en el transcriptoma puede tener más dificultades para distinguir algunas lecturas que provienen de secuencias genómicas similares.
+
+### 8.2 Parámetros de cuantificación
+
+Utilicé Salmon versión 2.8.0 con los siguientes parámetros principales:
+
+```bash
+--sketch
+-l U
+--fldMean 250
+--fldSD 25
+```
+
+La opción `--sketch` utiliza el modo de pseudoalineamiento de Salmon.
+
+Utilicé `-l U` para indicar una biblioteca single-end no específica de cadena, de acuerdo con la elección provisional realizada durante el análisis con featureCounts.
+
+Sin embargo, todavía necesito confirmar la especificidad de cadena real mediante los metadatos del estudio o un método independiente.
+
+Para la distribución de longitud de los fragmentos utilicé una media asumida de 250 pb y una desviación estándar de 25 pb.
+
+Estos valores no se midieron a partir de los datos de secuenciación.
+
+En datos single-end, Salmon no puede estimar directamente la distribución completa de longitud de los fragmentos a partir de pares de lecturas. Por eso, estas suposiciones pueden influir en las longitudes efectivas de los transcritos y en las estimaciones de abundancia.
+
+Quiero revisar la información sobre la preparación de la biblioteca antes de utilizar estos resultados para interpretaciones biológicas.
+
+### 8.3 Resultados de Salmon
+
+Salmon completó la cuantificación de transcritos para las tres muestras.
+
+| Muestra | Porcentaje de mapeo de Salmon |
+|---|---:|
+| SRR19020908 | 83.47% |
+| SRR19020909 | Aproximadamente 87.4% |
+| SRR19020910 | 85.21% |
+
+Los porcentajes de mapeo fueron relativamente similares entre las tres muestras.
+
+Estos porcentajes no deben interpretarse como directamente equivalentes a los porcentajes de alineamiento de Subread, porque los dos enfoques utilizan referencias y métodos de mapeo diferentes.
+
+Salmon generó un archivo `quant.sf` para cada muestra.
+
+Estos archivos contienen estimaciones de abundancia a nivel de transcritos, incluyendo valores TPM y conteos estimados.
+
+Los archivos de cuantificación se conservan localmente en:
+
+```text
+results/pseudoalignment/salmon_quant/
+```
+
+Todavía no he importado estos archivos en R ni los he resumido a nivel de gen.
+
+### 8.4 Limitaciones y posibles mejoras
+
+El flujo de Salmon fue útil para aprender cómo la cuantificación a nivel de transcritos se diferencia del alineamiento al genoma y del conteo de genes.
+
+Sin embargo, todavía quiero revisar algunos aspectos:
+
+1. Confirmar la especificidad de cadena mediante los metadatos del estudio o un método independiente.
+2. Comprobar si la distribución de longitud de fragmentos asumida es adecuada para esta biblioteca.
+3. Evaluar si un índice del transcriptoma con secuencias decoy mejoraría el análisis.
+4. Considerar el alineamiento selectivo de Salmon como alternativa al modo `--sketch` utilizado aquí.
+5. Importar los archivos `quant.sf` en R mediante tximport y una correspondencia entre transcritos y genes consistente con Ensembl versión 115.
+
+La documentación de Salmon describe el alineamiento selectivo y el modo sketch como dos enfoques diferentes. El alineamiento selectivo evalúa los posibles mapeos mediante puntuaciones de alineamiento, mientras que el modo sketch utiliza una estrategia de pseudoalineamiento más rápida.
+
+Todavía no he repetido el análisis utilizando alineamiento selectivo ni un índice con secuencias decoy. Estas son posibles mejoras futuras, no etapas que ya haya completado.
+
+## 9. Informes de MultiQC
 
 Generé informes de MultiQC por separado porque quería mantener claras las diferentes etapas del procesamiento.
 
-Los informes son:
+Durante el desarrollo del flujo de trabajo, creé informes intermedios para comparar las lecturas originales, el procesamiento estándar de fastp y la estrategia de recorte optimizada.
 
-1. `multiqc_before.html` — FastQC antes del recorte.
-2. `multiqc_after.html` — FastQC después del recorte original.
-3. `multiqc_tail1.html` — FastQC después del recorte optimizado.
-4. `multiqc_fastp_comparison.html` — comparación de las dos estrategias de fastp.
-5. `multiqc_final_tail1.html` — informe final del flujo optimizado.
+Después de documentar esas comparaciones, eliminé los informes intermedios anteriores y conservé los dos informes finales.
 
-Los informes intermedios se guardan localmente.
+### 9.1 Informe final del flujo basado en alineamiento
 
-### Informe final de MultiQC
-
-Para el informe final reuní:
+Para el informe final del flujo basado en alineamiento reuní:
 
 - Los resultados de FastQC de las lecturas optimizadas.
 - Los resultados de fastp del procesamiento optimizado.
@@ -778,17 +1178,42 @@ Resolví esto mediante un archivo de configuración que unifica los nombres de l
 
 Ahora la tabla **General Statistics** muestra tres filas, una por muestra, con los resultados de las diferentes herramientas integrados.
 
-**Informe final:**
+**Informe final del flujo basado en alineamiento:**
 
-[Descargar el informe final de MultiQC](04_multiqc/multiqc_final_tail1.html)
+[Descargar el informe final de MultiQC](results/alignment_based/multiqc/multiqc_final_tail1.html)
 
-**Archivo de configuración:**
+### 9.2 Informe final de Salmon
 
-[Ver la configuración de MultiQC](04_multiqc/multiqc_config.yaml)
+También generé un informe MultiQC separado para el flujo de Salmon.
 
-**Nota:** GitHub puede no mostrar una vista previa del archivo HTML debido a su tamaño. Para ver el informe interactivo, hay que descargar el archivo HTML original y abrirlo en un navegador.
+Este informe incluye:
 
-## 9. Qué aprendí de los resultados
+- Estadísticas de mapeo y cuantificación de Salmon.
+- Información sobre el formato de la biblioteca.
+- Información sobre la distribución de longitud de fragmentos.
+- Estadísticas de fastp.
+- Resultados de FastQC de las lecturas optimizadas.
+
+Utilicé el mismo archivo de configuración para organizar los resultados de manera consistente entre las tres muestras.
+
+**Informe final de Salmon:**
+
+[Descargar el informe final de Salmon](results/pseudoalignment/multiqc/multiqc_salmon_final.html)
+
+### 9.3 Configuración de MultiQC
+
+Ambos informes utilizan el mismo archivo de configuración:
+
+[Ver la configuración de MultiQC](code/config/multiqc_config.yaml)
+
+Los scripts utilizados para generar los informes son:
+
+- [`07_multiqc_alignment.sh`](code/bash/07_multiqc_alignment.sh)
+- [`08_multiqc_salmon.sh`](code/bash/08_multiqc_salmon.sh)
+
+**Nota:** GitHub puede no mostrar una vista previa de los archivos HTML debido a su tamaño. Para ver los informes interactivos, hay que descargar los archivos HTML originales y abrirlos en un navegador.
+
+## 10. Qué aprendí de los resultados
 
 El flujo optimizado funcionó para las tres muestras.
 
@@ -797,25 +1222,68 @@ Los resultados principales fueron:
 - Se conservó más del 99% de las lecturas después del filtrado.
 - El porcentaje Q30 fue aproximadamente del 99% en las tres muestras.
 - El recorte de la última base corrigió los problemas de calidad y contenido de `N`.
-- Los porcentajes de alineamiento estuvieron entre 88.83% y 89.32%.
-- Los porcentajes de asignación a genes estuvieron entre 68.5% y 72.4%.
+- Los porcentajes de alineamiento con Subread estuvieron entre 88.83% y 89.32%.
+- Los porcentajes de asignación a genes con featureCounts estuvieron entre 68.5% y 72.4%.
 - Todos los archivos BAM optimizados pasaron la validación.
 - Los conteos de genes originales y optimizados fueron muy similares.
+- Salmon generó estimaciones de abundancia de transcritos para las tres muestras.
+- Los dos enfoques de cuantificación produjeron sus propios resultados e informes de control de calidad.
 
-## 10. Próximos pasos
+También aprendí que los porcentajes de mapeo y asignación deben interpretarse teniendo en cuenta la referencia, la anotación y el método utilizado.
 
-La siguiente parte del proyecto estará enfocada en trabajar con los conteos de genes en R.
+Un porcentaje más alto no significa automáticamente que un enfoque sea biológicamente más preciso.
+
+El siguiente paso es entender cómo utilizar los diferentes resultados de cuantificación en R y comprobar si los metadatos de las muestras permiten realizar comparaciones biológicas significativas.
+
+## 11. Próximos pasos
+
+La siguiente parte del proyecto estará enfocada en trabajar con los conteos de genes y las estimaciones de abundancia de transcritos en R.
 
 Tengo previsto:
 
 1. Importar los resultados de featureCounts.
 2. Preparar la matriz de conteos.
-3. Revisar los metadatos de las muestras y los grupos experimentales.
-4. Confirmar la especificidad de cadena de la biblioteca.
-5. Explorar los datos mediante PCA y agrupamiento de muestras.
-6. Revisar si el diseño experimental permite realizar un análisis de expresión diferencial con DESeq2.
-7. Documentar los resultados y las decisiones tomadas durante el análisis.
+3. Importar los archivos `quant.sf` de Salmon utilizando tximport.
+4. Preparar una correspondencia entre transcritos y genes utilizando la anotación de Ensembl correspondiente.
+5. Revisar los metadatos de las muestras y los grupos experimentales.
+6. Confirmar la especificidad de cadena de la biblioteca.
+7. Revisar las suposiciones sobre la longitud de fragmentos utilizadas en Salmon.
+8. Explorar los datos mediante PCA y agrupamiento de muestras.
+9. Comparar los resultados de los flujos basados en alineamiento y Salmon cuando sea apropiado.
+10. Revisar si el diseño experimental permite realizar un análisis de expresión diferencial con DESeq2.
+11. Documentar los resultados y las decisiones tomadas durante el análisis.
 
+También quiero mejorar la reproducibilidad del flujo de trabajo documentando con más detalle la preparación de las referencias y la creación de los índices.
+
+## 12. Referencias y documentación
+
+Los siguientes recursos se utilizaron para entender las herramientas y los métodos incluidos en este proyecto.
+
+### Datos y referencias
+
+- [GEO GSE201955](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE201955)
+- [Genoma humano de Ensembl](https://www.ensembl.org/Homo_sapiens/Info/Index)
+- [Archivo FTP de Ensembl — versión 115](https://ftp.ensembl.org/pub/release-115/)
+
+### Control de calidad y alineamiento
+
+- [Documentación de SRA Toolkit](https://github.com/ncbi/sra-tools/wiki)
+- [FastQC](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/)
+- [fastp — Chen et al., 2018](https://doi.org/10.1093/bioinformatics/bty560)
+- [Subread — Liao et al., 2013](https://doi.org/10.1093/nar/gkt214)
+- [featureCounts — Liao et al., 2014](https://doi.org/10.1093/bioinformatics/btt656)
+- [SAMtools — Li et al., 2009](https://doi.org/10.1093/bioinformatics/btp352)
+- [MultiQC — Ewels et al., 2016](https://doi.org/10.1093/bioinformatics/btw354)
+
+### Salmon y análisis posterior
+
+- [Documentación de Salmon](https://salmon.readthedocs.io/)
+- [Modos de mapeo de Salmon: alineamiento selectivo y sketch](https://combine-lab.github.io/salmon/guides/mapping-modes/)
+- [Salmon — Patro et al., 2017](https://doi.org/10.1038/nmeth.4197)
+- [tximport — Bioconductor](https://bioconductor.org/packages/tximport/)
+- [tximport — Soneson, Love y Robinson, 2015](https://doi.org/10.12688/f1000research.7563.1)
+- [DESeq2 — Love, Huber y Anders, 2014](https://doi.org/10.1186/s13059-014-0550-8)
+- [RSeQC — Wang et al., 2012](https://doi.org/10.1093/bioinformatics/bts356)
 
 ---
 

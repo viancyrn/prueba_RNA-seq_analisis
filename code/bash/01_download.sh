@@ -6,9 +6,9 @@ set -euo pipefail
 # Dataset: GSE201955
 
 # Ir al directorio principal del proyecto
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../.."
 
-mkdir -p 00_raw
+mkdir -p data/raw_fastq
 
 while IFS= read -r SRR || [[ -n "$SRR" ]]; do
 
@@ -16,7 +16,7 @@ while IFS= read -r SRR || [[ -n "$SRR" ]]; do
     [[ -z "$SRR" ]] && continue
 
     # Saltar muestras ya descargadas
-    if [[ -s "00_raw/${SRR}.sra" ]]; then
+    if [[ -s "data/raw_fastq/${SRR}.sra" ]]; then
         echo "$SRR ya existe. Se omite."
         continue
     fi
@@ -24,7 +24,7 @@ while IFS= read -r SRR || [[ -n "$SRR" ]]; do
     echo "Descargando $SRR ..."
 
     # Descargar en un directorio temporal
-    TEMP_DIR="00_raw/.download_${SRR}"
+    TEMP_DIR="data/raw_fastq/.download_${SRR}"
     mkdir -p "$TEMP_DIR"
 
     prefetch "$SRR" -O "$TEMP_DIR"
@@ -37,8 +37,8 @@ while IFS= read -r SRR || [[ -n "$SRR" ]]; do
         exit 1
     fi
 
-    # Guardar directamente en 00_raw
-    mv "$SOURCE" "00_raw/${SRR}.sra"
+    # Guardar directamente en data/raw_fastq
+    mv "$SOURCE" "data/raw_fastq/${SRR}.sra"
 
     # Eliminar directorios temporales vacíos
     rmdir "$TEMP_DIR/$SRR" "$TEMP_DIR"

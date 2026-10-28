@@ -6,10 +6,10 @@ set -euo pipefail
 # Dataset: GSE201955
 
 # Ir al directorio principal del proyecto
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../.."
 
 # Crear el directorio de resultados
-mkdir -p 01_clean
+mkdir -p data/trimmed_fastq results/quality_control/fastp
 
 while IFS= read -r SRR || [[ -n "$SRR" ]]; do
 
@@ -17,10 +17,10 @@ while IFS= read -r SRR || [[ -n "$SRR" ]]; do
     [[ -z "$SRR" || "$SRR" == \#* ]] && continue
 
     # Definir archivos de entrada y salida
-    INPUT="00_raw/${SRR}.fastq"
-    OUTPUT="01_clean/${SRR}_tail1.fastq.gz"
-    HTML="01_clean/${SRR}_tail1_fastp.html"
-    JSON="01_clean/${SRR}_tail1_fastp.json"
+    INPUT="data/raw_fastq/${SRR}.fastq"
+    OUTPUT="data/trimmed_fastq/${SRR}_tail1.fastq.gz"
+    HTML="results/quality_control/fastp/${SRR}_tail1_fastp.html"
+    JSON="results/quality_control/fastp/${SRR}_tail1_fastp.json"
   
  # Comprobar que existe el archivo FASTQ
     if [[ ! -s "$INPUT" ]]; then

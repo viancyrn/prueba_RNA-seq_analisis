@@ -6,9 +6,9 @@ set -euo pipefail
 # Dataset: GSE201955
 
 # Ir al directorio principal del proyecto
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../.."
 
-mkdir -p 00_raw
+mkdir -p data/raw_fastq
 
 while IFS= read -r SRR || [[ -n "$SRR" ]]; do
 
@@ -16,8 +16,8 @@ while IFS= read -r SRR || [[ -n "$SRR" ]]; do
     [[ -z "$SRR" || "$SRR" == \#* ]] && continue
 
     # Definir archivos de entrada y salida
-    INPUT="00_raw/${SRR}.sra"
-    OUTPUT="00_raw/${SRR}.fastq"
+    INPUT="data/raw_fastq/${SRR}.sra"
+    OUTPUT="data/raw_fastq/${SRR}.fastq"
 
     # Comprobar que existe el archivo SRA
     if [[ ! -s "$INPUT" ]]; then
@@ -34,7 +34,7 @@ while IFS= read -r SRR || [[ -n "$SRR" ]]; do
     echo "Convirtiendo $SRR a FASTQ ..."
 
     # Convertir una muestra a la vez
-    fasterq-dump "$INPUT" -O 00_raw -e 4 -p
+    fasterq-dump "$INPUT" -O data/raw_fastq -e 4 -p
 
     # Comprobar el resultado
     if [[ ! -s "$OUTPUT" ]]; then

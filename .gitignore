@@ -1,25 +1,37 @@
-# Datos originales de secuenciación
+# Datos de secuenciación y alineamiento
 *.sra
 *.fastq
 *.fastq.gz
 *.fq
 *.fq.gz
-
-# Archivos de alineamiento
 *.bam
 *.bai
 *.sam
+*.vcf
 
-# Genoma de referencia e índices
-ref/
+# Referencias e índices grandes
+data/references/
 
-# Archivos temporales
+# Resultados grandes de Salmon
+results/pseudoalignment/salmon_quant/
+
+# Datos auxiliares de MultiQC
+*_data/
+
+# Archivos temporales y del sistema
 .DS_Store
 *.tmp
 .download_*/
 
-# Resultados de control de calidad
+# Directorios antiguos durante la reorganización
+00_raw/
 01_clean/
 02_bam/
 03_counts/
 04_multiqc/
+05_salmon/
+ref/
+scripts/
+
+# Matriz de conteos grande (conservar localmente)
+results/alignment_based/featurecounts/gene_counts_tail1.txt

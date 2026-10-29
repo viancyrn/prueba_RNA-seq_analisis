@@ -21,22 +21,6 @@ As of now, I have only selected 3 samples to test the workflow and understand wh
 
 The workflow covers the initial stages of RNA-seq analysis, from raw sequencing reads to gene-level counts and transcript-level abundance estimates, not with the sole goal to run the tools, but also to check the results, understand possible problems, and document the decisions I make along the way.
 
-So far, I have completed:
-
-1. Downloading the sequencing data.
-2. Converting SRA files to FASTQ.
-3. Checking raw read quality with FastQC.
-4. Processing reads with fastp.
-5. Comparing the original and optimized trimming results.
-6. Aligning the reads to the human reference genome.
-7. Checking the BAM files and alignment statistics.
-8. Counting reads assigned to genes with featureCounts.
-9. Quantifying transcript abundance with Salmon.
-10. Generating separate MultiQC reports for the alignment-based and Salmon workflows.
-11. Organizing the scripts, documentation, and final results into a clearer project structure.
-
-The next step will be to prepare the count matrix and import the Salmon results into R using tximport.
-
 **Differential gene expression analysis has not yet been performed.**
 
 ## 2. Dataset and samples
@@ -658,22 +642,6 @@ Este repositorio forma parte de mi proceso de aprendizaje para crear un flujo de
 Por ahora, solamente he seleccionado 3 muestras para probar el flujo de trabajo y entender qué ocurre en cada etapa.
 
 El análisis cubre las primeras etapas del procesamiento de RNA-seq, desde las lecturas originales hasta el conteo de lecturas por gen y la estimación de abundancia a nivel de transcritos. Mi objetivo no es solamente ejecutar las herramientas, sino también revisar los resultados, entender los posibles problemas y documentar las decisiones que voy tomando durante el proceso.
-
-Hasta ahora he completado:
-
-1. La descarga de los datos de secuenciación.
-2. La conversión de los archivos SRA a FASTQ.
-3. La evaluación de la calidad de las lecturas originales con FastQC.
-4. El procesamiento de las lecturas con fastp.
-5. La comparación entre los resultados del recorte original y el optimizado.
-6. El alineamiento de las lecturas al genoma de referencia humano.
-7. La revisión de los archivos BAM y las estadísticas de alineamiento.
-8. El conteo de las lecturas asignadas a genes con featureCounts.
-9. La cuantificación de la abundancia de transcritos con Salmon.
-10. La generación de informes MultiQC separados para los flujos de trabajo basados en alineamiento y Salmon.
-11. La organización de los scripts, la documentación y los resultados finales en una estructura más clara.
-
-El siguiente paso será preparar la matriz de conteos e importar los resultados de Salmon en R utilizando tximport.
 
 **Todavía no he realizado el análisis de expresión diferencial.**
 

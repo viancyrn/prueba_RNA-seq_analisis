@@ -782,72 +782,228 @@ However, constructing the mapping directly from FASTA headers was a decision bas
 
 Before differential expression analysis, the experimental design, sample metadata, strandedness, and assumptions used during Salmon quantification should be reviewed.
 
-## 12. Importing alignment-based gene counts into R
+## 12. Importing featureCounts and Salmon results into R
 
-**Status: Planned — not yet performed.**
+### 12.1. Gene-level quantification
 
-The alignment-based workflow has already generated gene-level counts using Subread and featureCounts.
+This pilot RNA-seq analysis used three samples from GEO accession **GSE201955**:
 
-The next step is to import these counts into R and inspect the resulting count matrix.
+- `SRR19020908`
+- `SRR19020909`
+- `SRR19020910`
 
-The input file is stored locally at:
+Two gene-quantification approaches were compared:
+
+1. **Alignment-based quantification:** Subread genome alignment followed by featureCounts using the Ensembl GRCh38 release 115 GTF annotation.
+2. **Transcriptome-based quantification:** Salmon using an Ensembl GRCh38 release 115 cDNA transcriptome index, followed by gene-level summarization with `tximport`.
+
+The analyses were performed in R using:
+
+- `code/R/01_import_featurecounts.R`
+- `code/R/02_salmon_tx_import_DESeq2.R`
+
+The resulting R objects were saved locally:
+
+- `results/gene_expression/featurecounts_gene_counts.rds`
+- `results/gene_expression/tximport_gene_counts.rds`
+- `results/gene_expression/tx2gene_fasta.rds`
+
+These files contain the featureCounts gene-level count matrix, the imported Salmon estimates, and the transcript-to-gene correspondence used for Salmon.
+
+### 12.2. Transcript-to-gene mapping: a troubleshooting lesson
+
+The initial attempt to construct a transcript-to-gene mapping from the Ensembl GTF annotation did not produce a complete match with the transcript identifiers in Salmon's `quant.sf` files.
+
+This demonstrated that using references associated with the same genome assembly and Ensembl release does not necessarily guarantee identifier compatibility after annotation conversion.
+
+The solution was to construct the `tx2gene` table directly from the headers of the **same Ensembl cDNA FASTA file used to build the Salmon index**.
+
+The resulting table contained **328,868 transcript entries**, and all transcript identifiers in the three Salmon quantification files matched the table (**100% identifier matching**).
+
+After summarization with `tximport`, the Salmon gene-level matrix contained **38,678 genes across three samples**.
+
+**Lesson learned:** the transcriptome reference, Salmon index, and transcript-to-gene mapping must be validated together before downstream analysis.
+
+---
+
+## 13. Comparison between featureCounts and Salmon
+
+### 13.1. Overall agreement between methods
+
+The featureCounts and Salmon gene-level matrices were compared in R using shared Ensembl gene identifiers.
+
+Spearman rank correlations were calculated separately for each sample, including only genes with positive counts in both methods within the corresponding sample.
+
+| Sample | Spearman correlation (approx.) |
+|---|---:|
+| SRR19020908 | 0.927 |
+| SRR19020909 | 0.927 |
+| SRR19020910 | 0.930 |
+
+The results indicate strong overall agreement in gene-abundance rankings among the genes included in the comparison.
+
+However, **high correlation does not imply identical counts or demonstrate that either method is more biologically accurate**.
+
+![Gene-level comparison of featureCounts and Salmon across three RNA-seq samples](results/gene_expression/figures/featurecounts_vs_salmon_3panels.png)
+
+*Figure 1. Comparison of featureCounts counts and Salmon estimated counts across three RNA-seq samples. Both axes show log(1 + counts). The dashed diagonal indicates equal numerical values. Genes with zero counts in either method were excluded from the correlation and plot.*
+
+### 13.2. Genes with the largest discrepancies
+
+To investigate gene-specific disagreements, the following log2 ratio was calculated for each gene and sample:
 
 ```text
-results/alignment_based/featurecounts/gene_counts_tail1.txt
+log2((Salmon estimated counts + 1) / (featureCounts counts + 1))
 ```
 
-### 12.1 Importing featureCounts results
+Genes were ranked by their mean absolute log2 ratio across the three samples.
 
-*To be completed after importing the featureCounts output into R.*
+The five most discrepant genes were:
 
-### 12.2 Inspecting the count matrix
+| Ensembl gene ID | Gene name | Gene biotype | Annotated transcripts | Higher quantification |
+|---|---|---|---:|---|
+| ENSG00000254772 | EEF1G | protein_coding | 24 | Salmon |
+| ENSG00000225840 | No annotated gene name | processed_pseudogene | 1 | Salmon |
+| ENSG00000167996 | FTH1 | protein_coding | 16 | Salmon |
+| ENSG00000232573 | RPL3P4 | transcribed_processed_pseudogene | 1 | Salmon |
+| ENSG00000184584 | STING1 | protein_coding | 25 | featureCounts |
 
-*To be completed after checking gene identifiers, sample names, matrix dimensions, and count distributions.*
+For **EEF1G**, featureCounts reported zero counts in all three samples, while Salmon estimated more than 2,000 counts per sample.
 
-### 12.3 Saving the imported data
+For **STING1**, featureCounts reported hundreds of counts per sample, whereas Salmon estimated zero counts.
 
-*To be completed after validating and saving the R objects.*
+These differences were consistent across the three samples, demonstrating that strong overall correlation can coexist with substantial gene-specific disagreement.
 
-## 13. Comparison of alignment-based and transcript-based quantification
+![Heatmap of the five most discrepant genes between Salmon and featureCounts](results/gene_expression/figures/top5_gene_discrepancies_heatmap.png)
 
-**Status: Planned — not yet performed.**
+*Figure 2. Log2 ratio of Salmon estimated counts to featureCounts counts for the five most discrepant genes. Positive values indicate higher Salmon estimates; negative values indicate higher featureCounts counts. The causes of these differences have not been established.*
 
-This section will compare the gene-level results obtained using two approaches:
+### 13.3. Gene annotation and transcript complexity
 
-1. **Alignment-based:** Subread + featureCounts.
-2. **Transcript-based:** Salmon + tximport.
+The five genes were examined using Ensembl release 115 annotation.
 
-Both approaches used the same optimized FASTQ files, but they differ in their reference sequences, mapping strategies, and gene quantification methods.
+Three were annotated as protein-coding genes and two as pseudogenes. Their annotated transcript counts ranged from one to 25.
 
-### 13.1 Harmonizing gene identifiers
+![Number of annotated transcripts for the five most discrepant genes](results/gene_expression/figures/top5_gene_transcript_counts.png)
 
-*To be completed.*
+*Figure 3. Number of annotated transcripts for the five most discrepant genes, calculated using the transcript-to-gene mapping derived from the Ensembl cDNA FASTA reference.*
 
-### 13.2 Comparing gene detection
+Possible contributors to method-specific discrepancies include:
 
-*To be completed.*
+- Sequence similarity between genes and pseudogenes.
+- Reads compatible with multiple transcript or genomic sequences.
+- Differences between genome-based feature assignment and transcriptome-based abundance estimation.
+- Differences in reference composition and annotation representation.
+- Complex gene models and overlapping genomic features.
 
-### 13.3 Comparing gene-level count distributions
+**These are possible explanations, not confirmed causes for the five individual genes.**
 
-*To be completed.*
+The pilot did not demonstrate that Salmon correctly recovered reads lost by featureCounts, or that featureCounts necessarily provided the correct counts for genes where Salmon estimated zero.
 
-### 13.4 Comparing expression patterns between methods
+### 13.4. featureCounts read-assignment summary
 
-*To be completed.*
+The featureCounts assignment summary was examined to assess how reads were classified during gene counting.
 
-### 13.5 Evaluating methodological differences and limitations
+| Category | SRR19020908 | SRR19020909 | SRR19020910 |
+|---|---:|---:|---:|
+| Assigned | 68.53% | 72.35% | 71.17% |
+| Unassigned_Unmapped | 11.17% | 10.90% | 10.68% |
+| Unassigned_NoFeatures | 11.29% | 8.28% | 10.27% |
+| Unassigned_Ambiguity | 9.02% | 8.47% | 7.87% |
+| Unassigned_MultiMapping | 0.00% | 0.00% | 0.00% |
 
-*To be completed.*
+Approximately **69–72%** of reads were assigned to annotated genes.
 
-The comparison will consider differences in gene detection, estimated counts, agreement between methods, and potential sources of bias.
+Approximately **8–9%** were classified as unassigned because of feature ambiguity, while approximately **8–11%** were not assigned to annotated features.
 
-A higher mapping rate, a larger number of detected genes, or a higher total count will not automatically be interpreted as evidence that one method is more accurate.
+Importantly, `Unassigned_Ambiguity` is not equivalent to multimapping.
 
-## 14. Differential expression analysis with DESeq2
+Likewise, the reported **0% `Unassigned_MultiMapping` does not prove that no reads were capable of mapping to multiple locations**. This category depends on the alignment information and featureCounts configuration.
 
-**Status: Not started.**
+The read-assignment summary identifies areas for further investigation but does not, by itself, explain the extreme gene-specific discrepancies.
 
-*This section is intentionally left empty and will be completed after validating the sample metadata, experimental design, and gene-level quantification results.*
+### 13.5. Limitations of the pilot comparison
+
+The following limitations must be considered:
+
+1. Only three RNA-seq samples were analyzed.
+2. The methods use different reference representations and quantification models.
+3. featureCounts produces read-assignment counts, whereas Salmon produces estimated transcript abundances subsequently summarized to genes.
+4. Correlations were calculated only for genes with positive counts in both methods. Genes detected by only one method were excluded.
+5. The five highlighted genes were selected because they showed extreme discrepancies and are not representative of all genes.
+6. Gene-specific discrepancies were not conclusively attributed to multimapping, pseudogene similarity, annotation differences, or another mechanism.
+7. No independent ground truth was available to establish which method was more accurate for the discrepant genes.
+
+Consequently, this comparison is a **technical troubleshooting and quality-control exercise**, not proof that Salmon is biologically more accurate than featureCounts.
+
+### 13.6. Lessons learned and improvements for the official analysis
+
+Salmon will be prioritized for the official analysis because of its computational efficiency and suitability for the available hardware, including a computer with **8 GB RAM**.
+
+This choice is based on practical computational considerations, **not on demonstrated superior biological accuracy**.
+
+| Area | Planned improvement | Rationale |
+|---|---|---|
+| Reference consistency | Use a documented, compatible transcriptome and gene annotation release | Avoid identifier mismatches |
+| Transcript-to-gene mapping | Derive and validate `tx2gene` against the exact Salmon reference | Prevent missing or incorrectly matched transcript IDs |
+| Salmon index | Evaluate a decoy-aware index and selective-alignment-compatible configuration if resources permit | Improve discrimination of reads with similarities outside the target transcriptome |
+| Indexing strategy | Reassess the pilot's `--sketch` approach | Document computational and mapping trade-offs |
+| Library type | Verify strandedness and single-end fragment-length assumptions | Reduce bias from incorrect library specifications |
+| Salmon QC | Review mapping rates, library-type inference, and quantification summaries | Identify sample-specific problems |
+| Gene discrepancies | Reinvestigate EEF1G, FTH1, STING1, and pseudogene-associated differences | Examine possible causes using additional evidence |
+| Reproducibility | Record software versions, reference versions, parameters, and R package versions | Make the official workflow reproducible |
+
+The pilot used a Salmon index built from Ensembl cDNA sequences with `--sketch`. The suitability of a different index configuration for the official analysis must be evaluated against available RAM, storage, and runtime.
+
+A decoy-aware index is a **proposed improvement to assess**, not a guarantee that gene-specific discrepancies will disappear.
+
+The main lesson is that **successful quantification and high global correlation are not sufficient to validate every individual gene estimate**.
+
+---
+
+## 14. Differential expression analysis with DESeq2 — Not performed
+
+**Differential expression analysis was not performed during this pilot.**
+
+The three samples were used to validate the technical workflow, including:
+
+- Read quality control and trimming.
+- Genome alignment and featureCounts quantification.
+- Salmon transcript quantification.
+- Import and gene-level summarization in R.
+- Comparison of the two quantification approaches.
+- Investigation of gene-specific discrepancies.
+
+These three samples do not constitute the planned, adequately replicated asthma-versus-control experimental design.
+
+Therefore, this pilot does **not** report differentially expressed genes, p-values, adjusted p-values, or biological conclusions about asthma-associated expression.
+
+### Official analysis plan
+
+The official analysis is planned to include **10 asthma samples and 10 control samples**, subject to confirmation of metadata, sample quality, and group definitions.
+
+Salmon estimates will be imported through `tximport` and analyzed using DESeq2 with an appropriate experimental design.
+
+Before interpreting differential expression, the analysis will evaluate:
+
+- Sample metadata and group assignments.
+- Quality-control metrics and potential outliers.
+- Normalization and dispersion estimates.
+- Principal component analysis (PCA).
+- Potential confounding factors.
+- Statistical significance and multiple-testing correction.
+
+**Pilot status: technical workflow completed; differential expression analysis pending the official dataset.**
+
+---
+
+## 15. Pilot conclusion
+
+The three-sample RNA-seq pilot successfully established a workflow for read quality control, preprocessing, genome alignment, gene counting, Salmon transcript quantification, and gene-level analysis in R.
+
+The comparison between featureCounts and Salmon revealed strong overall agreement but important gene-specific discrepancies. These findings informed improvements planned for the official analysis, particularly reference consistency, transcript-to-gene mapping, Salmon index selection, library assumptions, and quantification quality control.
+
+The pilot is considered **technically completed**, with differential expression analysis intentionally deferred until the official asthma-versus-control dataset is available.
 
 ## 15. References and documentation
 
@@ -1547,73 +1703,228 @@ Sin embargo, la extracción directa de identificadores desde los encabezados FAS
 
 Antes de realizar un análisis de expresión diferencial, debo revisar los metadatos, el diseño experimental, la orientación de las bibliotecas y las suposiciones utilizadas durante la cuantificación con Salmon.
 
-## 12. Importación a R de los conteos obtenidos mediante alineamiento
+## 12. Importación de resultados de featureCounts y Salmon en R
 
-**Estado: Planificado — todavía no realizado.**
+### 12.1. Cuantificación a nivel de gen
 
-El flujo de trabajo basado en alineamiento ya generó conteos a nivel de gen utilizando Subread y featureCounts.
+El análisis piloto de RNA-seq utilizó tres muestras del estudio GEO **GSE201955**:
 
-El siguiente paso será importar estos resultados a R y examinar la matriz de conteos.
+- `SRR19020908`
+- `SRR19020909`
+- `SRR19020910`
 
-El archivo de entrada se encuentra localmente en:
+Se compararon dos estrategias de cuantificación:
+
+1. **Cuantificación basada en alineamiento:** alineamiento genómico con Subread y conteo de lecturas mediante featureCounts, utilizando la anotación GTF de Ensembl GRCh38, versión 115.
+2. **Cuantificación basada en el transcriptoma:** Salmon utilizando el transcriptoma de cDNA de Ensembl GRCh38, versión 115, seguido de la agregación de transcritos a genes mediante `tximport`.
+
+Los análisis se realizaron en R mediante:
+
+- `code/R/01_import_featurecounts.R`
+- `code/R/02_salmon_tx_import_DESeq2.R`
+
+Los objetos generados se guardaron localmente en:
+
+- `results/gene_expression/featurecounts_gene_counts.rds`
+- `results/gene_expression/tximport_gene_counts.rds`
+- `results/gene_expression/tx2gene_fasta.rds`
+
+Estos archivos contienen las matrices de cuantificación y la correspondencia transcrito-gen utilizada para Salmon.
+
+### 12.2. Problema de correspondencia entre transcritos y genes
+
+Durante la importación inicial de Salmon, la tabla de correspondencia transcrito-gen construida a partir de la anotación GTF no coincidía con todos los identificadores presentes en los archivos `quant.sf`.
+
+Esto demostró que utilizar referencias de la misma versión del genoma o de Ensembl no garantiza automáticamente una correspondencia completa de identificadores después de convertir las anotaciones.
+
+La solución consistió en construir la tabla `tx2gene` directamente a partir de los encabezados del **mismo archivo FASTA de cDNA utilizado para generar el índice de Salmon**.
+
+La tabla resultante contenía **328.868 entradas de transcritos**, con una correspondencia del **100% de los identificadores de transcritos** presentes en las tres muestras.
+
+Después de la agregación con `tximport`, se obtuvo una matriz de **38.678 genes y tres muestras**.
+
+**Lección aprendida:** es necesario validar conjuntamente el transcriptoma de referencia, el índice de Salmon y la correspondencia transcrito-gen antes de continuar con el análisis.
+
+---
+
+## 13. Comparación entre featureCounts y Salmon
+
+### 13.1. Concordancia general entre los métodos
+
+Se compararon en R las matrices de cuantificación a nivel de gen utilizando los identificadores Ensembl compartidos.
+
+Se calculó la correlación de Spearman por muestra, incluyendo únicamente genes con conteos positivos en ambos métodos.
+
+| Muestra | Correlación de Spearman (aprox.) |
+|---|---:|
+| SRR19020908 | 0.927 |
+| SRR19020909 | 0.927 |
+| SRR19020910 | 0.930 |
+
+Los resultados indican una concordancia general elevada en el orden de abundancia de los genes incluidos en la comparación.
+
+Sin embargo, **una correlación elevada no significa que los conteos sean idénticos ni demuestra que uno de los métodos sea biológicamente más preciso**.
+
+![Comparación de featureCounts y Salmon en tres muestras](results/gene_expression/figures/featurecounts_vs_salmon_3panels.png)
+
+*Figura 1. Comparación de conteos de featureCounts y conteos estimados de Salmon. Los ejes muestran log(1 + conteos). La diagonal representa valores numéricamente iguales. Se excluyeron los genes con conteos iguales a cero en cualquiera de los dos métodos.*
+
+### 13.2. Genes con mayores discrepancias
+
+Para identificar diferencias específicas entre métodos, se calculó la siguiente razón logarítmica:
 
 ```text
-results/alignment_based/featurecounts/gene_counts_tail1.txt
+log2((conteos estimados de Salmon + 1) / (conteos de featureCounts + 1))
 ```
 
-### 12.1 Importación de los resultados de featureCounts
+Los genes se ordenaron según la media del valor absoluto de esta diferencia en las tres muestras.
 
-*Pendiente de completar después de importar los resultados a R.*
+Los cinco genes con mayores discrepancias fueron:
 
-### 12.2 Inspección de la matriz de conteos
+| ID de Ensembl | Nombre del gen | Biotipo | Transcritos anotados | Mayor cuantificación |
+|---|---|---|---:|---|
+| ENSG00000254772 | EEF1G | protein_coding | 24 | Salmon |
+| ENSG00000225840 | Sin nombre anotado | processed_pseudogene | 1 | Salmon |
+| ENSG00000167996 | FTH1 | protein_coding | 16 | Salmon |
+| ENSG00000232573 | RPL3P4 | transcribed_processed_pseudogene | 1 | Salmon |
+| ENSG00000184584 | STING1 | protein_coding | 25 | featureCounts |
 
-*Pendiente de completar después de revisar los identificadores de genes, nombres de muestras, dimensiones y distribuciones de conteos.*
+Para **EEF1G**, featureCounts registró cero conteos en las tres muestras, mientras que Salmon estimó más de 2.000 conteos por muestra.
 
-### 12.3 Almacenamiento de los datos importados
+En cambio, para **STING1**, featureCounts registró cientos de conteos por muestra, mientras que Salmon estimó cero.
 
-*Pendiente de completar después de validar y guardar los objetos de R.*
+Estas diferencias se observaron de forma consistente en las tres muestras y muestran que una correlación global elevada puede coexistir con discrepancias muy grandes para genes individuales.
 
-## 13. Comparación entre la cuantificación basada en alineamiento y la basada en transcritos
+![Mapa de calor de los cinco genes con mayores discrepancias](results/gene_expression/figures/top5_gene_discrepancies_heatmap.png)
 
-**Estado: Planificado — todavía no realizado.**
+*Figura 2. Razón log2 entre los conteos estimados de Salmon y los conteos de featureCounts. Los valores positivos indican mayor cuantificación con Salmon; los negativos indican mayor cuantificación con featureCounts. Las causas específicas todavía no se han establecido.*
 
-Esta sección comparará los resultados a nivel de gen obtenidos mediante dos enfoques:
+### 13.3. Anotación génica y complejidad de transcritos
 
-1. **Basado en alineamiento:** Subread + featureCounts.
-2. **Basado en transcritos:** Salmon + tximport.
+Se revisó la anotación de los cinco genes utilizando Ensembl, versión 115.
 
-Ambos enfoques utilizaron los mismos archivos FASTQ optimizados, pero difieren en las secuencias de referencia, las estrategias de mapeo y los métodos de cuantificación.
+Tres genes estaban clasificados como codificantes de proteínas y dos como pseudogenes. El número de transcritos anotados varió entre uno y 25.
 
-### 13.1 Armonización de identificadores de genes
+![Número de transcritos anotados para los cinco genes](results/gene_expression/figures/top5_gene_transcript_counts.png)
 
-*Pendiente de completar.*
+*Figura 3. Número de transcritos anotados para los cinco genes con mayores discrepancias, según la tabla transcrito-gen derivada del archivo FASTA de cDNA.*
 
-### 13.2 Comparación de genes detectados
+Entre las posibles causas que requieren investigación adicional se encuentran:
 
-*Pendiente de completar.*
+- Similitud de secuencias entre genes y pseudogenes.
+- Lecturas compatibles con múltiples transcritos o secuencias genómicas.
+- Diferencias entre la asignación de lecturas a características genómicas y la estimación de abundancia a partir del transcriptoma.
+- Diferencias en la composición de las referencias y en la representación de las anotaciones.
+- Modelos génicos complejos y características genómicas solapadas.
 
-### 13.3 Comparación de distribuciones de conteos
+**Estas son explicaciones posibles, no causas demostradas para los cinco genes.**
 
-*Pendiente de completar.*
+El piloto no demostró que Salmon recuperara correctamente lecturas perdidas por featureCounts ni que featureCounts produjera necesariamente los valores correctos para los genes donde Salmon estimó cero.
 
-### 13.4 Comparación de patrones de expresión entre métodos
+### 13.4. Resumen de asignación de lecturas de featureCounts
 
-*Pendiente de completar.*
+Se examinó el resumen de featureCounts para evaluar la clasificación de las lecturas durante el conteo génico.
 
-### 13.5 Evaluación de diferencias metodológicas y limitaciones
+| Categoría | SRR19020908 | SRR19020909 | SRR19020910 |
+|---|---:|---:|---:|
+| Assigned | 68.53% | 72.35% | 71.17% |
+| Unassigned_Unmapped | 11.17% | 10.90% | 10.68% |
+| Unassigned_NoFeatures | 11.29% | 8.28% | 10.27% |
+| Unassigned_Ambiguity | 9.02% | 8.47% | 7.87% |
+| Unassigned_MultiMapping | 0.00% | 0.00% | 0.00% |
 
-*Pendiente de completar.*
+Aproximadamente entre el **69% y el 72%** de las lecturas fueron asignadas a genes anotados.
 
-La comparación considerará las diferencias en la detección de genes, los conteos estimados, la concordancia entre métodos y las posibles fuentes de sesgo.
+Entre el **8% y el 9%** quedaron sin asignación por ambigüedad entre características, mientras que aproximadamente entre el **8% y el 11%** no se asignaron a características anotadas.
 
-Un mayor porcentaje de mapeo, un mayor número de genes detectados o un mayor total de conteos no se interpretará automáticamente como evidencia de que un método es más preciso.
+Es importante señalar que `Unassigned_Ambiguity` no equivale a multimapping.
 
-## 14. Análisis de expresión diferencial con DESeq2
+Asimismo, el **0% registrado en `Unassigned_MultiMapping` no demuestra que no existan lecturas capaces de alinearse en múltiples posiciones**. La interpretación de esta categoría depende de la información del alineamiento y de la configuración de featureCounts.
 
-**Estado: No iniciado.**
+Por lo tanto, el resumen de asignación identifica aspectos que requieren investigación adicional, pero no explica por sí solo las discrepancias extremas observadas para algunos genes.
 
-*Esta sección se deja intencionalmente vacía y se completará después de validar los metadatos de las muestras, el diseño experimental y los resultados de cuantificación a nivel de gen.*
+### 13.5. Limitaciones de la comparación
 
+Esta comparación presenta las siguientes limitaciones:
+
+1. Se analizaron únicamente tres muestras de RNA-seq.
+2. Los métodos utilizan diferentes representaciones de referencia y modelos de cuantificación.
+3. featureCounts genera conteos de lecturas asignadas, mientras que Salmon produce estimaciones de abundancia que posteriormente se agregan a nivel de gen.
+4. Las correlaciones se calcularon únicamente para genes con conteos positivos en ambos métodos.
+5. Los cinco genes destacados fueron seleccionados por presentar discrepancias extremas y no representan necesariamente el comportamiento del conjunto completo de genes.
+6. No se demostró de forma concluyente que las discrepancias fueran causadas por multimapping, similitud con pseudogenes, diferencias de anotación u otro mecanismo.
+7. No se dispuso de una referencia independiente que permitiera establecer qué método era más preciso para los genes discrepantes.
+
+En consecuencia, esta comparación constituye un **ejercicio de evaluación técnica, control de calidad y resolución de problemas**, no una demostración de mayor precisión biológica de Salmon frente a featureCounts.
+
+### 13.6. Lecciones aprendidas y mejoras para el análisis oficial
+
+Salmon será priorizado para el análisis oficial por su eficiencia computacional y su compatibilidad con los recursos disponibles, incluido un equipo con **8 GB de RAM**.
+
+Esta decisión responde a consideraciones prácticas de procesamiento, **no a una superioridad biológica demostrada**.
+
+| Aspecto | Mejora prevista | Objetivo |
+|---|---|---|
+| Compatibilidad de referencias | Utilizar versiones documentadas y compatibles del transcriptoma y la anotación génica | Evitar problemas de correspondencia entre identificadores |
+| Correspondencia transcrito-gen | Construir y validar `tx2gene` frente a la referencia exacta de Salmon | Evitar identificadores ausentes o incorrectos |
+| Índice de Salmon | Evaluar un índice con secuencias señuelo (*decoys*) y una configuración compatible con alineamiento selectivo, si los recursos lo permiten | Mejorar la discriminación de lecturas similares a otras regiones genómicas |
+| Estrategia de indexación | Revisar el uso de `--sketch` en el piloto | Documentar las ventajas y limitaciones computacionales |
+| Tipo de biblioteca | Verificar la direccionalidad y los supuestos de longitud de fragmentos para lecturas single-end | Reducir posibles sesgos de cuantificación |
+| Control de calidad de Salmon | Revisar tasas de mapeo, inferencia del tipo de biblioteca y resultados por muestra | Identificar problemas antes del análisis estadístico |
+| Genes discrepantes | Investigar nuevamente EEF1G, FTH1, STING1 y las discrepancias asociadas con pseudogenes | Evaluar posibles causas mediante evidencia adicional |
+| Reproducibilidad | Registrar versiones de programas, referencias, parámetros y paquetes de R | Facilitar la reproducción del análisis |
+
+En el piloto se utilizó un índice de Salmon construido a partir de secuencias de cDNA de Ensembl mediante `--sketch`. Para el análisis oficial será necesario evaluar si una configuración alternativa resulta viable considerando la memoria RAM, el almacenamiento y el tiempo de ejecución.
+
+Un índice con *decoys* constituye una **mejora propuesta para evaluación**, pero no garantiza que desaparezcan todas las discrepancias.
+
+La principal lección es que **una cuantificación completada correctamente y una correlación global elevada no son suficientes para validar las estimaciones de todos los genes individuales**.
+
+---
+
+## 14. Análisis de expresión diferencial con DESeq2 — No realizado
+
+**No se realizó un análisis de expresión diferencial durante este piloto.**
+
+Las tres muestras se utilizaron para validar el flujo de trabajo técnico:
+
+- Control de calidad y recorte de lecturas.
+- Alineamiento genómico y cuantificación con featureCounts.
+- Cuantificación de transcritos con Salmon.
+- Importación y agregación de resultados en R.
+- Comparación de ambos métodos de cuantificación.
+- Investigación de discrepancias específicas entre genes.
+
+Estas tres muestras no constituyen el diseño experimental previsto con suficientes réplicas de pacientes con asma y controles.
+
+Por lo tanto, este piloto **no presenta genes diferencialmente expresados, valores p, valores p ajustados ni conclusiones biológicas sobre expresión asociada con el asma**.
+
+### Plan para el análisis oficial
+
+El análisis oficial está previsto con **10 muestras de asma y 10 muestras de control**, después de confirmar los metadatos, la calidad de las muestras y la asignación de los grupos.
+
+Las estimaciones de Salmon se importarán mediante `tximport` y se analizarán con DESeq2 utilizando un diseño experimental apropiado.
+
+Antes de interpretar la expresión diferencial, se evaluarán:
+
+- Metadatos y asignación de grupos.
+- Calidad de las muestras y posibles valores atípicos.
+- Normalización y estimaciones de dispersión.
+- Análisis de componentes principales (PCA).
+- Posibles factores de confusión.
+- Significancia estadística y corrección por pruebas múltiples.
+
+**Estado del piloto: flujo de trabajo técnico completado; análisis de expresión diferencial pendiente para el conjunto de datos oficial.**
+
+---
+
+## 15. Conclusión del piloto
+
+El piloto de RNA-seq con tres muestras permitió establecer un flujo de trabajo para el control de calidad, el preprocesamiento, el alineamiento genómico, el conteo de genes, la cuantificación de transcritos con Salmon y el análisis a nivel de gen en R.
+
+La comparación entre featureCounts y Salmon mostró una concordancia general elevada, pero también discrepancias importantes en genes individuales. Estos resultados permitieron identificar mejoras para el análisis oficial, especialmente en la compatibilidad de referencias, la correspondencia transcrito-gen, la selección del índice de Salmon, los supuestos sobre la biblioteca y el control de calidad de la cuantificación.
+
+El piloto se considera **técnicamente finalizado**, mientras que el análisis de expresión diferencial queda pendiente hasta disponer del conjunto de datos oficial con muestras de asma y controles.
 ## 15. Referencias y documentación
 
 ### Datos y referencias genómicas

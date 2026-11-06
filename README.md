@@ -38,7 +38,7 @@ The workflow currently includes:
 
 **Differential gene expression analysis has not yet been performed.**
 
-The next stage will be to import the alignment-based gene counts into R and compare them with the Salmon + tximport results.
+The featureCounts and Salmon gene-level results have now been imported into R and compared across all three pilot samples. The technical pilot is complete. The next stage is to prepare the official asthma-versus-control analysis, including validation of sample metadata, reference selection, library assumptions, and the experimental design.
 
 ## 2. Dataset and samples
 
@@ -78,9 +78,11 @@ prueba_RNA-seq_analisis/
 │   │   ├── 06_salmon.sh
 │   │   ├── 07_multiqc_alignment.sh
 │   │   └── 08_multiqc_salmon.sh
-│   ├── config/
-│   │   └── multiqc_config.yaml
-│   └── R/
+│   └── config/
+│       └── multiqc_config.yaml
+│       └── R/
+│           ├── 01_import_featurecounts.R
+│           └── 02_salmon_tx_import_DESeq2.R
 │
 ├── commands/
 │   ├── README.md
@@ -109,8 +111,13 @@ prueba_RNA-seq_analisis/
     │   ├── salmon_quant/
     │   └── multiqc/
     └── gene_expression/
+        ├── featurecounts_gene_counts.rds
         ├── tximport_gene_counts.rds
-        └── tx2gene_fasta.rds
+        ├── tx2gene_fasta.rds
+        └── figures/
+            ├── featurecounts_vs_salmon_3panels.png
+            ├── top5_gene_discrepancies_heatmap.png
+            └── top5_gene_transcript_counts.png
 ```
 
 Large FASTQ, BAM, reference, and quantification files are stored locally rather than committed to GitHub.
@@ -181,14 +188,14 @@ flowchart TB
     I --> R["Import featureCounts into R"]
     Q --> S["Compare quantification methods"]
     R --> S
-    S --> N["Future: differential expression with DESeq2"]
+    S --> N["Official analysis: differential expression with DESeq2"]
 
     classDef completed fill:#e4f3e8,stroke:#44845a,color:#173b29
     classDef planned fill:#e8efff,stroke:#6485b7,color:#213b62
     classDef report fill:#fff2d8,stroke:#c59a48,color:#654b19
 
-    class A,B,C,D,E,F,G,H,I,K,L,O,P,Q completed
-    class R,S,N planned
+    class A,B,C,D,E,F,G,H,I,K,L,O,P,Q,R,S completed
+    class N planned
     class J,M report
 ```
 
@@ -1005,7 +1012,7 @@ The comparison between featureCounts and Salmon revealed strong overall agreemen
 
 The pilot is considered **technically completed**, with differential expression analysis intentionally deferred until the official asthma-versus-control dataset is available.
 
-## 15. References and documentation
+## 16. References and documentation
 
 ### Dataset and reference resources
 
@@ -1131,7 +1138,7 @@ Actualmente se completaron dos enfoques de cuantificación:
 
 El diagrama completo se encuentra en la [Sección 4 en inglés](#4-tools-and-workflow).
 
-La siguiente etapa será importar los resultados de featureCounts a R y comparar ambos enfoques de cuantificación.
+Los dos enfoques de cuantificación ya fueron importados a R y comparados a nivel de gen. El piloto mostró una concordancia general elevada, pero también discrepancias importantes en genes individuales que servirán para orientar mejoras en el análisis oficial. El análisis de expresión diferencial continúa pendiente.
 
 ## 5. Control de calidad y recorte
 
@@ -1925,7 +1932,8 @@ El piloto de RNA-seq con tres muestras permitió establecer un flujo de trabajo 
 La comparación entre featureCounts y Salmon mostró una concordancia general elevada, pero también discrepancias importantes en genes individuales. Estos resultados permitieron identificar mejoras para el análisis oficial, especialmente en la compatibilidad de referencias, la correspondencia transcrito-gen, la selección del índice de Salmon, los supuestos sobre la biblioteca y el control de calidad de la cuantificación.
 
 El piloto se considera **técnicamente finalizado**, mientras que el análisis de expresión diferencial queda pendiente hasta disponer del conjunto de datos oficial con muestras de asma y controles.
-## 15. Referencias y documentación
+
+## 16. Referencias y documentación
 
 ### Datos y referencias genómicas
 
